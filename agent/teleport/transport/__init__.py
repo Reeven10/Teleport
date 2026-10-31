@@ -1,41 +1,31 @@
-"""Peer link (P2). STUB from P1: replace freely, keep create_peer_link and the PeerLink Protocol."""
+"""Transport module (P2).
+
+Provides the PeerLink implementation, pairing manager, link type detection,
+and peer WebSocket client and server channels.
+"""
 
 from __future__ import annotations
 
-from contract.contract import DeviceInfo, LinkQuality, PeerMessage, PeerMessageHandler
+from typing import TYPE_CHECKING
 
-from ..core.context import Context
+from contract.contract import PeerLink
 
+from .link_detector import classify_interface, select_best_address
+from .service import PeerLinkService
 
-class StubPeerLink:
-    def __init__(self, ctx: Context) -> None:
-        self.ctx = ctx
-        self._handlers: list[PeerMessageHandler] = []
-
-    async def pair(self, addr: str, pin: str) -> DeviceInfo:
-        raise NotImplementedError("pairing is not implemented yet (P2)")
-
-    async def connect(self, device_id: str) -> None:
-        raise NotImplementedError("peer connect is not implemented yet (P2)")
-
-    async def send(self, device_id: str, msg: PeerMessage) -> None:
-        raise NotImplementedError("peer send is not implemented yet (P2)")
-
-    def on_message(self, handler: PeerMessageHandler) -> None:
-        self._handlers.append(handler)
-
-    def link_quality(self, device_id: str) -> LinkQuality | None:
-        return None
-
-    def list_peers(self) -> list[DeviceInfo]:
-        return []
-
-    async def startup(self) -> None:
-        pass
-
-    async def shutdown(self) -> None:
-        pass
+if TYPE_CHECKING:
+    from ..core.context import Context
 
 
-def create_peer_link(ctx: Context) -> StubPeerLink:
-    return StubPeerLink(ctx)
+def create_peer_link(ctx: Context) -> PeerLink:
+    """Create and return a production PeerLink service satisfying contract.PeerLink Protocol."""
+    return PeerLinkService(ctx)
+
+
+__all__ = [
+    "PeerLink",
+    "PeerLinkService",
+    "classify_interface",
+    "create_peer_link",
+    "select_best_address",
+]
