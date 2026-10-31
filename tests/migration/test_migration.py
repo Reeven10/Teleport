@@ -135,7 +135,7 @@ async def test_abort_during_transfer(make_pair: PairFactory) -> None:
         await asyncio.sleep(0.01)
     st = await p.a.manager.abort(started.id)
 
-    assert st.phase == "ROLLED_BACK" and st.error == "aborted by user"
+    assert st.phase == "ROLLED_BACK" and st.error == "Aborted by user."
     assert p.a.host.states[p.wid] == "running"
     assert p.a.ctx.authority.get(p.wid).state == "SOURCE"
     deadline = asyncio.get_running_loop().time() + 10  # mig.abort queues behind slowed traffic

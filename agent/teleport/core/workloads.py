@@ -209,6 +209,7 @@ class WorkloadRunner:
             TELEPORT_WORKLOAD_ID=workload_id,
             TELEPORT_RUN_TOKEN=run.token,
             PYTHONUNBUFFERED="1",
+            TELEPORT_COMPRESS_LEVEL=str(self.ctx.prefs.compressLevel),
             PYTHONPATH=os.pathsep.join(p for p in (str(SDK_DIR), env.get("PYTHONPATH")) if p),
         )
         env.pop("TELEPORT_RESTORE_DIR", None)
@@ -298,7 +299,8 @@ class WorkloadRunner:
         work = self.workdir(workload_id)
         for ck in run.manifest.checkpoints:
             if ck.paths:
-                await asyncio.to_thread(self.store.pack_paths, workload_id, ck.id, work, ck.paths)
+                level = self.ctx.prefs.compressLevel
+                await asyncio.to_thread(self.store.pack_paths, workload_id, ck.id, work, ck.paths, level)
         return self.store.records(workload_id)
 
     async def terminate(self, workload_id: str, grace: float = 5.0) -> WorkloadRun:

@@ -1,11 +1,12 @@
 # Teleport test matrix
 
-Run 2026-11-01 on `feat/core` after merging main (P2 transport/security prompt 5, P3 orchestrator
+Run 2026-11-01 on `feat/core` (updated after hardening) after merging main (P2 transport/security prompt 5, P3 orchestrator
 and history, P4 dashboard and remote). One Windows laptop: real agents as subprocesses or in-process,
 on loopback. The two-laptop rows are **manual** and follow [RUNBOOK.md](RUNBOOK.md).
 
-**Automated result: 329 passed, 0 failed, 2 expected failures (known bugs, `xfail(strict=True)`), 1
-collection error (P3 test file).** UI: Vitest 19/19, Playwright 7/7 on mock data (5/7 with a live agent).
+**Automated result: 347 passed, 0 failed, 2 expected failures (known bugs, `xfail(strict=True)`), 1
+collection error (P3 test file).** End to end with real agents: 11/11 passed + the 2 expected failures.
+Failure injection: 16/16. UI: Vitest 19/19, Playwright 7/7 on mock data (5/7 with a live agent).
 Issue ids (P2-x, P3-x, P4-x) are in [INTEGRATION_ISSUES.md](INTEGRATION_ISSUES.md).
 
 Commands: `npm test` (all pytest), `node scripts/py.mjs -m pytest tests/migration/e2e` (real agents,
@@ -47,7 +48,8 @@ about 3 min), `npm run test:ui`, `npm run e2e`, `npm run typecheck`, `npm run li
 
 | ID | Case | How | Test / what to check | Result |
 | --- | --- | --- | --- | --- |
-| M1 | 6 checkpoints, hash-validated, resumes on B, A gone, interruption reported | auto | `test_scenarios.py::test_2_migrate_counter_job_to_b`, `tests/migration/test_migration.py` | PASS (243 ms on dev:two) |
+| M1 | 6 checkpoints, hash-validated, resumes on B, A gone, interruption reported | auto | `test_scenarios.py::test_2_migrate_counter_job_to_b`, `tests/migration/test_migration.py` | PASS (183 to 193 ms, real agents, 4 hops) |
+| M3 | Interruption < 3 s, freeze window carries only changes | auto + bench | `test_faults.py::test_slow_link_completes_and_reports_a_small_freeze`; `scripts/bench_transfer.py` (20 MB unit: 53 to 59 ms) | PASS |
 | M2 | Migrate back and repeatedly, delta only, epoch rises | auto | `tests/migration/test_continuity.py::test_migrate_there_and_back_twice_resends_only_changes` | PASS |
 | RB1 | Target killed mid-transfer: ROLLED_BACK, A keeps running, reason shown | auto | `test_scenarios.py::test_4_target_killed_mid_transfer_rolls_back` | PASS |
 | RB2 | Corrupt chunk, start failure, link cut, abort, stale epoch, 5 of 10 | auto | `tests/migration/test_migration.py` (14) | PASS |
@@ -55,6 +57,24 @@ about 3 min), `npm run test:ui`, `npm run e2e`, `npm run typecheck`, `npm run li
 | A1 | Split brain: lower epoch stops, conflict reported on both sides | auto | `test_continuity.py::test_split_brain_lower_epoch_stops_and_conflict_is_reported` | PASS |
 | A2 | Authority status in the dashboard | manual | `npm run dev:two`, Migration page open, migrate B to A: shows "Lease Epoch 2", source RELEASED, target TARGET. Then reload the page | **FAIL** after reload: mock data shows "TRANSFERRING, Epoch 1" (P4-1, P4-6). PASS live while the page is open |
 | A3 | authority.change on /ws/events | auto | `test_scenarios.py::test_2_migrate_counter_job_to_b` | PASS |
+
+## Failure injection (hardening)
+
+Every row must end COMPLETED or ROLLED_BACK, with a short dashboard message, and never two running copies.
+
+| ID | Fault | Test (`tests/migration/test_faults.py`) | Result |
+| --- | --- | --- | --- |
+| FI1 | Link killed in each phase: CONNECTING, EVALUATING, TRANSFERRING, VALIDATING, FENCING, STARTING_TARGET | `test_link_killed_in_every_phase[*]` (6) | PASS (ROLLED_BACK; STARTING_TARGET waits for the lease, then rolls back) |
+| FI2 | Link killed right after the target started (mig.started lost) | `test_link_killed_right_after_target_started` | PASS (COMPLETED via the target's lease) |
+| FI3 | Corrupt chunk once / persistently | `test_corrupt_chunk_once_is_detected_and_resent`, `test_persistently_corrupt_chunk_rolls_back` | PASS |
+| FI4 | Target killed while it starts | `test_target_killed_while_starting` | PASS |
+| FI5 | Source killed during the fence | `test_source_killed_during_fence` | PASS |
+| FI6 | Slow link (5 ms per message, 300 KB unit, 32 KB chunks) | `test_slow_link_completes_and_reports_a_small_freeze` | PASS |
+| FI7 | Target disk too small (refused up front) / full mid-transfer (ENOSPC) | `test_target_disk_too_small_is_refused_up_front`, `test_target_disk_full_mid_transfer_aborts` | PASS |
+| FI8 | Workload exits during the transfer | `test_workload_exits_during_transfer` | PASS |
+| FI9 | Target unreachable from the start | `test_unreachable_target_is_a_clear_rollback` | PASS |
+| FI10 | Restart in every phase, split brain, there and back | `tests/migration/test_continuity.py` (19) | PASS |
+| FI11 | Short human-readable messages | `assert_clear_outcome` in every FI test (10 to 160 chars, a sentence, no traces or ids) | PASS |
 
 ## History, reasons, security
 
@@ -80,4 +100,6 @@ about 3 min), `npm run test:ui`, `npm run e2e`, `npm run typecheck`, `npm run li
 | U3 | UI unit tests | auto | `npm run test:ui` | PASS (19/19) |
 | U4 | UI end to end | auto | `npm run e2e` | PASS 7/7 without an agent; 5/7 with a live agent (P4-8) |
 | Q1 | `npm run typecheck` | auto | mypy strict + tsc | **FAIL**: 51 mypy errors in 13 P3/P4 files (P3-9, P4-9); P1 files and tsc clean |
-| Q2 | `npm run lint` | auto | ruff + eslint | **FAIL**: 7 ruff errors in P3 files (P3-10); eslint clean |
+| Q2 | `npm run lint` | auto | ruff + eslint | **FAIL**: 7 ruff errors, all in P3 files (P3-10); P1 files and eslint clean |
+| C1 | Settings from the dashboard persist (`predictionWindowSec`, `preferredLink`, `remoteConsent`, `checkpointChunkKb` alias), typos rejected | auto | `tests/core/test_app.py::test_dashboard_settings_persist_and_apply` | PASS |
+| C2 | Contract flags `LinkQuality.online/simulated`, `Stats.stale` | auto | `tests/core/test_contract.py::test_link_quality_and_stats_optional_flags` | PASS |

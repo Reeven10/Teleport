@@ -18,8 +18,9 @@ export interface Reason { code: string; severity: 'pass' | 'warn' | 'block'; tex
 export interface FeasibilityResult { workloadId: string; sourceId: string; targetId: string; decision: Decision; reasons: Reason[]; estTransferSec: number; estInterruptionMs: number; ts: number }
 export interface Authority { workloadId: string; holder: string | null; epoch: number; state: AuthorityState }
 export interface MigrationStatus { id: string; workloadId: string; sourceId: string; targetId: string; phase: Phase; trigger: Trigger; link: LinkType; decision?: Decision; reasons: Reason[]; checkpoints: CheckpointRecord[]; bytesTotal: number; bytesDone: number; authority: Authority; interruptionMs?: number; error?: string; startedAt: number; endedAt?: number; metrics?: MigrationMetrics }
-export interface CheckpointMetric { id: string; stage: 'initial' | 'delta' | 'precopy'; sizeBytes: number; chunks: number; retries: number; transferMs: number; mbps: number; skipped: boolean }
-export interface MigrationMetrics { migrationId: string; link: LinkType; chunkSize: number; durationMs: number; interruptionMs?: number; bytesTotal: number; bytesDone: number; bytesSkipped: number; throughputMbps: number; checkpoints: CheckpointMetric[]; ts: number }
+export interface CheckpointMetric { id: string; stage: 'initial' | 'catchup' | 'delta' | 'precopy'; sizeBytes: number; chunks: number; retries: number; transferMs: number; mbps: number; skipped: boolean }
+export interface MigrationMetrics { migrationId: string; link: LinkType; chunkSize: number; durationMs: number; interruptionMs?: number; bytesTotal: number; bytesDone: number; bytesSkipped: number; throughputMbps: number; checkpoints: CheckpointMetric[]; ts: number; cutover?: CutoverTiming }
+export interface CutoverTiming { catchupRounds: number; fenceMs: number; deltaBytes: number; deltaMs: number; startMs: number }
 export interface AuthorityConflict { workloadId: string; deviceId: string; peerId: string; localEpoch: number; remoteEpoch: number; winner: string; stopped: string; reason: string; ts: number }
 export interface Recommendation { workloadId: string; trigger: Trigger; targetId: string | null; decision: Decision; reasons: Reason[]; auto: boolean; ts: number }
 export interface RemoteSession { id: string; workloadId: string; hostId: string; viewerId: string; consent: boolean; fps: number; ts: number }

@@ -246,3 +246,17 @@ accepted as a deprecated alias of `chunkSizeKb`, clamped to 16 to 512 KB, and ec
   `checkpointChunkKb` (default 1024 is above the limit), then P1 removes the alias. The remote service should
   read `ctx.prefs.remoteConsent`: `auto_allow` grants consent, `deny_all` refuses `start_session`, `prompt`
   keeps today's consent dialog.
+
+## Hardening (P1, 2026-11-01)
+
+**P2-13. Transfer throughput is capped near 80 Mbps by the frame encoding, not by the link.**
+- File: `agent/teleport/transport/connection.py` (`send`): each `MigChunk` is JSON with the chunk
+  base64'd inside (`dataB64`), then AES-GCM encrypted, then base64'd again into a **text** WebSocket frame.
+  That is about 1.8x the bytes, two base64 passes and one big JSON per 256 KB chunk.
+- Measured: `node scripts/py.mjs scripts/bench_transfer.py` gives about 80 Mbps on loopback at every chunk
+  size of 256 KB or more, CPU-bound.
+- Fix: send encrypted frames as **binary** WebSocket messages (no outer base64). Optionally, a binary
+  chunk frame (header + raw bytes) would also drop the inner base64. That one is a contract change, so ask P1.
+- Also seen under heavy load: a spurious `device.lost` with the peer still alive. P1 now reconnects
+  once (5 s) before acting on it, so migrations no longer roll back on a blip, but the transport
+  should not emit it while the peer answers.

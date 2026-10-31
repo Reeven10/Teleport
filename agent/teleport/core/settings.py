@@ -55,6 +55,10 @@ class Prefs(BaseModel):
     memHighPct: float = 90
     # Migration transfer. Chunks travel base64 in one peer frame, so keep them well under 1 MiB.
     chunkSizeKb: int = Field(256, ge=CHUNK_KB_MIN, le=CHUNK_KB_MAX)
+    # gzip level for checkpoint units packed by the agent and the SDK (0 = store only, fastest for
+    # data that is already compressed; 1 = fast; 6 = default). Units are already compressed, so the
+    # wire adds no second compression.
+    compressLevel: int = Field(6, ge=0, le=9)
     # Pre-copy: every N seconds send changed checkpoints of running workloads ahead (0 = off) to
     # precopyTargetId, or to the first connected peer when it is empty.
     precopyIntervalS: float = Field(0, ge=0)

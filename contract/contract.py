@@ -182,13 +182,23 @@ class Authority(ContractModel):
 
 class CheckpointMetric(ContractModel):
     id: str
-    stage: Literal["initial", "delta", "precopy"]
+    stage: Literal["initial", "catchup", "delta", "precopy"]
     sizeBytes: int
     chunks: int
     retries: int
     transferMs: float
     mbps: float
     skipped: bool
+
+
+class CutoverTiming(ContractModel):
+    """Where the interruption (pause to mig.started ok) went."""
+
+    catchupRounds: int  # live delta rounds before freezing
+    fenceMs: float  # pause + fence + final checkpoint of manifest paths
+    deltaBytes: int  # sent while frozen
+    deltaMs: float  # frozen delta transfer + validation
+    startMs: float  # mig.start until mig.started ok (target restore + launch)
 
 
 class MigrationMetrics(ContractModel):
@@ -203,6 +213,7 @@ class MigrationMetrics(ContractModel):
     throughputMbps: float
     checkpoints: list[CheckpointMetric]
     ts: float
+    cutover: CutoverTiming | None = None
 
 
 class AuthorityConflict(ContractModel):

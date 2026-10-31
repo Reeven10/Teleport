@@ -74,6 +74,7 @@ class PrefsUpdate(BaseModel):
     precopyIntervalS: float | None = None
     precopyTargetId: str | None = None
     leaseSyncS: float | None = None
+    compressLevel: int | None = None
     predictionWindowSec: float | None = None
     preferredLink: PreferredLink | None = None
     remoteConsent: RemoteConsent | None = None

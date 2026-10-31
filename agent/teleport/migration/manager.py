@@ -22,6 +22,7 @@ import base64
 import binascii
 import builtins
 import contextlib
+import errno
 import json
 import logging
 import os
@@ -42,6 +43,7 @@ from contract.contract import (
     AuthorityConflictEvent,
     CheckpointMetric,
     CheckpointRecord,
+    CutoverTiming,
     DecisionLog,
     DeviceInfo,
     DeviceLostEvent,
@@ -77,11 +79,15 @@ log = logging.getLogger("teleport.migration")
 CODE_UNIT = "teleport.code"
 CODE_EXCLUDE = (".teleport-local", "__pycache__", "*.pyc", ".git", "node_modules", ".venv")
 TERMINAL: set[Phase] = {"COMPLETED", "ROLLED_BACK", "REMOTE_ACCESS", "FAILED"}
-Stage = Literal["initial", "delta", "precopy"]
+Stage = Literal["initial", "catchup", "delta", "precopy"]
 
 
 class MigrationError(RuntimeError):
-    pass
+    """A failure with a short message for the dashboard; `detail` keeps the technical part."""
+
+    def __init__(self, message: str, detail: str = "") -> None:
+        super().__init__(message)
+        self.detail = detail
 
 
 class MigrationAborted(MigrationError):
@@ -141,6 +147,9 @@ class Timeouts:
     retries: int = 3
     window: int = 8
     chunk_delay: float = 0.0  # dev/demo slow motion, TELEPORT_DEV_SLOW_TRANSFER_MS
+    catchup_rounds: int = 3  # live delta rounds before freezing, to keep the freeze window small
+    catchup_bytes: int = 64 * 1024  # freeze once a round has less than this left to send
+    relink: float = 5.0  # after device.lost, how long to try reconnecting before giving up
 
     @classmethod
     def from_env(cls) -> Timeouts:
@@ -220,6 +229,11 @@ class _SourceRun:
     metrics: list[CheckpointMetric] = field(default_factory=list)
     bytes_skipped: int = 0
     last_publish: float = 0.0
+    catchup_rounds: int = 0
+    fence_ms: float | None = None
+    delta_bytes: int = 0
+    delta_ms: float | None = None
+    start_ms: float | None = None
 
 
 @dataclass
@@ -295,7 +309,7 @@ class MigrationManager:
             task.cancel()
         for run in self._sources.values():
             if run.task and not run.task.done():
-                self._abort_source(run, "agent shutting down")
+                self._abort_source(run, "This agent is shutting down.")
         tasks = [r.task for r in self._sources.values() if r.task and not r.task.done()]
         if tasks:
             await asyncio.wait(tasks, timeout=10)
@@ -355,10 +369,10 @@ class MigrationManager:
                 # Operator override for a migration interrupted by a restart: resume here. If the
                 # target did start, the split-brain guard stops it (its epoch is now older).
                 src.awaiting = False
-                await self._rollback(src, "aborted by user while waiting for the target")
+                await self._rollback(src, "Aborted by user while waiting for the target; resuming here.")
                 await self._relaunch({src.status.workloadId})
             elif src.status.phase not in TERMINAL and not src.committed:
-                self._abort_source(src, "aborted by user")
+                self._abort_source(src, "Aborted by user.")
                 if src.task:
                     await asyncio.wait([src.task], timeout=15)
             return src.status.model_copy(deep=True)
@@ -484,6 +498,17 @@ class MigrationManager:
             throughputMbps=round(mbps, 2),
             checkpoints=builtins.list(run.metrics),
             ts=time.time(),
+            cutover=(
+                CutoverTiming(
+                    catchupRounds=run.catchup_rounds,
+                    fenceMs=round(run.fence_ms, 1),
+                    deltaBytes=run.delta_bytes,
+                    deltaMs=round(run.delta_ms or 0.0, 1),
+                    startMs=round(run.start_ms or 0.0, 1),
+                )
+                if run.fence_ms is not None
+                else None
+            ),
         )
 
     def _basic_metrics(self, st: MigrationStatus) -> MigrationMetrics:
@@ -570,20 +595,26 @@ class MigrationManager:
                 await self._finish(run, "REMOTE_ACCESS")
             elif result.decision == "STAY":
                 blocks = "; ".join(r.text for r in result.reasons if r.severity == "block")
-                await self._finish(run, "FAILED", f"Decision STAY: {blocks or 'no viable option'}")
+                await self._finish(
+                    run,
+                    "FAILED",
+                    _short(f"Teleport decided to keep it here: {blocks or 'no device can take it.'}"),
+                )
             else:
                 await self._migrate(run, manifest)
         except Exception as e:
-            reason = run.abort_reason or (str(e) or type(e).__name__)
-            if isinstance(e, TimeoutError) and not run.abort_reason:
-                reason = f"timed out during {st.phase}"
+            reason, detail = _explain(e, run.abort_reason, st.phase)
+            if detail:
+                log.info("%s: %s (%s)", st.id, reason, detail)
+                _note(st, "error.detail", "warn", _short(detail, 300))
             if run.committed:
                 log.exception("%s: error after the target took over", st.id)
-                await self._finish(run, "COMPLETED", f"cleanup after handover failed: {reason}")
-            elif not run.prepared:
-                await self._finish(run, "FAILED", reason)
+                await self._finish(run, "COMPLETED", f"Handed over, but cleanup here failed: {reason}")
+            elif not run.prepared:  # nothing was offered yet: the source simply keeps running
+                _note(st, "rollback", "block", f"Rolled back: {reason}")
+                await self._finish(run, "ROLLED_BACK", reason)
             elif run.start_sent and not run.target_refused:
-                await self._await_lease(run, f"{reason} after mig.start went out")
+                await self._await_lease(run, reason)
             else:
                 await self._rollback(run, reason)
 
@@ -611,10 +642,16 @@ class MigrationManager:
         except Exception:
             log.exception("could not log decision")
 
-    def _snapshot(
+    async def _snapshot(
         self, run: _SourceRun, ids: builtins.list[str], skip_missing: bool = False
     ) -> builtins.list[CheckpointRecord]:
-        """Freeze the current units into outgoing/ so later writes cannot change what is sent."""
+        """Freeze the current units into outgoing/ (off the event loop: reads and hashes files)."""
+        return await asyncio.to_thread(self._snapshot_sync, run, ids, skip_missing)
+
+    def _snapshot_sync(
+        self, run: _SourceRun, ids: builtins.list[str], skip_missing: bool
+    ) -> builtins.list[CheckpointRecord]:
+        """Copy the current units into outgoing/ so later writes cannot change what is sent."""
         wid = run.status.workloadId
         run.outgoing.mkdir(parents=True, exist_ok=True)
         out: builtins.list[CheckpointRecord] = []
@@ -623,7 +660,7 @@ class MigrationManager:
             if data is None or rec is None:
                 if skip_missing:
                     continue
-                raise MigrationError(f"checkpoint {cid!r} has never been saved")
+                raise MigrationError(f"Checkpoint {cid} was never saved by the workload.")
             (run.outgoing / f"{cid}.tar.gz").write_bytes(data)
             out.append(
                 CheckpointRecord(
@@ -632,10 +669,13 @@ class MigrationManager:
             )
         return out
 
-    def _pack_code(self, run: _SourceRun) -> CheckpointRecord:
-        wid = run.status.workloadId
-        files = collect_files(["."], self.host.source_dir(wid), exclude=CODE_EXCLUDE)
-        data = pack_unit(None, files)
+    async def _pack_code(self, run: _SourceRun) -> CheckpointRecord:
+        source_dir, level = self.host.source_dir(run.status.workloadId), self.ctx.prefs.compressLevel
+        return await asyncio.to_thread(self._pack_code_sync, run, source_dir, level)
+
+    def _pack_code_sync(self, run: _SourceRun, source_dir: Path, level: int) -> CheckpointRecord:
+        files = collect_files(["."], source_dir, exclude=CODE_EXCLUDE)
+        data = pack_unit(None, files, level)
         run.outgoing.mkdir(parents=True, exist_ok=True)
         (run.outgoing / f"{CODE_UNIT}.tar.gz").write_bytes(data)
         return CheckpointRecord(
@@ -670,7 +710,7 @@ class MigrationManager:
         assert isinstance(ready, MigReady)
         if not ready.ok:
             st.reasons = [*st.reasons, *ready.reasons]
-            raise MigrationError("target refused: " + "; ".join(r.text for r in ready.reasons))
+            raise MigrationError("The target refused: " + " ".join(r.text for r in ready.reasons))
         have = set(ready.have or []) & {r.id for r in records}
         for r in records:
             if r.id in have:
@@ -679,19 +719,64 @@ class MigrationManager:
                 self._mark(run, r, sent=True, validated=True)
         return have
 
+    def _ensure_running(self, run: _SourceRun) -> None:
+        """A workload that exited on its own has no live state left to hand over."""
+        wid = run.status.workloadId
+        if self._local_state(wid) in ("running", "paused"):
+            return
+        code = self.host.status(wid).exitCode
+        how = f"exit code {code}" if code is not None else "it is not running"
+        raise MigrationError(f"The workload stopped during the transfer ({how}); nothing to hand over.")
+
+    async def _changed_since_sent(self, run: _SourceRun, ids: builtins.list[str]) -> builtins.list[str]:
+        records = await asyncio.to_thread(self.store.records, run.status.workloadId)
+        current = {r.id: r.sha256 for r in records}
+        return [cid for cid in ids if current.get(cid) != run.sent[cid].sha256]
+
+    def _pending_bytes(self, run: _SourceRun, ids: builtins.list[str]) -> int:
+        records = (self.store.record(run.status.workloadId, cid) for cid in ids)
+        return sum(r.sizeBytes for r in records if r is not None)
+
+    async def _send_changes(
+        self, run: _SourceRun, changed_ids: builtins.list[str], epoch: int, stage: Stage
+    ) -> int:
+        """Snapshot and send the units whose SHA-256 changed since they were last sent (mig.fenced
+        tells the target which units are replaced), then wait for the target to validate them."""
+        st = run.status
+        if not changed_ids:  # nothing changed: no mig.fenced, no extra validation round trip
+            return 0
+        changed = await self._snapshot(run, changed_ids)
+        for r in changed:
+            run.sent[r.id] = r
+            self._mark(run, r, sent=False, validated=False)
+        size = sum(r.sizeBytes for r in changed)
+        st.bytesTotal += size
+        await self._publish(st)
+        await self._send(st.targetId, MigFenced(migrationId=st.id, changed=changed))
+        try:  # all changed units at once: one round of acks instead of one per unit
+            async with asyncio.TaskGroup() as tg:
+                for r in changed:
+                    tg.create_task(self._transfer(run, r, epoch, stage))
+        except BaseExceptionGroup as eg:
+            raise eg.exceptions[0] from None
+        await self._await_validated(run)
+        return size
+
     async def _migrate(self, run: _SourceRun, manifest: WorkloadManifest) -> None:
         st, t, auth = run.status, self.timeouts, self.ctx.authority
         wid, target = st.workloadId, st.targetId
         lease = auth.get(wid)
         if not auth.may_run(wid):
-            raise MigrationError(f"this device does not hold {wid} ({lease.state}, holder {lease.holder})")
+            raise MigrationError(
+                f"This device does not hold {manifest.name} right now ({lease.state.lower()})."
+            )
         if lease.state == "TARGET":  # it arrived here by migration; now it leaves as SOURCE
             lease = await auth.claim(wid, self.ctx.device_id)
         user_ids = [c.id for c in manifest.checkpoints]
 
-        # Live snapshot: the workload keeps running and keeps authority.
+        # 1. Live snapshot and full transfer: the workload keeps running and keeps authority.
         await self.host.request_checkpoint(wid, t.checkpoint)
-        records = [self._pack_code(run), *self._snapshot(run, user_ids)]
+        records = [await self._pack_code(run), *await self._snapshot(run, user_ids)]
         for r in records:
             run.sent[r.id] = r
             self._mark(run, r)
@@ -702,12 +787,24 @@ class MigrationManager:
         for r in records:
             if r.id not in have:
                 await self._transfer(run, r, lease.epoch, "initial")
+                self._ensure_running(run)
         await self._phase(run, "VALIDATING")
         await self._await_validated(run)
 
-        # Cutover. Final checkpoint while still running, then fence.
-        await self.host.request_checkpoint(wid, t.checkpoint)
+        # 2. Catch-up rounds, still live: resend what changed meanwhile until little is left, so the
+        #    freeze window below only carries the last small delta.
+        for _ in range(t.catchup_rounds):
+            await self.host.request_checkpoint(wid, t.checkpoint)
+            self._ensure_running(run)
+            changed_ids = await self._changed_since_sent(run, user_ids)
+            if not changed_ids or self._pending_bytes(run, changed_ids) <= t.catchup_bytes:
+                break
+            run.catchup_rounds += 1
+            await self._send_changes(run, changed_ids, lease.epoch, "catchup")
+        self._ensure_running(run)
         self._check(run)
+
+        # 3. Freeze window (the interruption): pause, fence, send only what changed, start the target.
         fence_start = time.perf_counter()
         await self._phase(run, "FENCING")
         self.host.pause(wid)
@@ -715,47 +812,41 @@ class MigrationManager:
         run.fence_epoch = fenced.epoch
         st.authority = fenced
         await self._send(target, MigFence(migrationId=st.id, epoch=fenced.epoch))
-        await self.host.request_checkpoint(wid, t.checkpoint)  # paused: manifest paths, now consistent
-        current = {r.id: r.sha256 for r in self.store.records(wid)}
-        changed_ids = [cid for cid in user_ids if current.get(cid) != run.sent[cid].sha256]
-        changed = self._snapshot(run, changed_ids)
-        for r in changed:
-            run.sent[r.id] = r
-            self._mark(run, r, sent=False, validated=False)
-        st.bytesTotal += sum(r.sizeBytes for r in changed)
-        await self._publish(st)
-        await self._send(target, MigFenced(migrationId=st.id, changed=changed))
-        for r in changed:
-            await self._transfer(run, r, fenced.epoch, "delta")
-        await self._await_validated(run)
+        if any(c.paths for c in manifest.checkpoints):  # paused: manifest paths are now consistent
+            await self.host.request_checkpoint(wid, t.checkpoint)
+        delta_start = time.perf_counter()
+        run.fence_ms = (delta_start - fence_start) * 1000
+        changed_ids = await self._changed_since_sent(run, user_ids)
+        run.delta_bytes = await self._send_changes(run, changed_ids, fenced.epoch, "delta")
+        run.delta_ms = (time.perf_counter() - delta_start) * 1000
 
         self._check(run)
         run.start_sent = True  # from here an abort must wait for the target's answer
         await self._phase(run, "STARTING_TARGET")
+        start_sent_at = time.perf_counter()
         await self._send(target, MigStart(migrationId=st.id, epoch=fenced.epoch))
         started = await run.mailbox.expect(("started",), t.start)
         assert isinstance(started, MigStarted)
         if not started.ok:
             run.target_refused = True
-            raise MigrationError(
-                run.late_abort or f"target failed to start: {started.error or 'unknown error'}"
-            )
+            why = started.error or "unknown error"
+            raise MigrationError(run.late_abort or f"The target could not start the workload: {why}.")
         if run.late_abort:
-            st.reasons = [
-                *st.reasons,
-                Reason(
-                    code="abort.late",
-                    severity="warn",
-                    text=f"Too late to abort ({run.late_abort}): the target had already started.",
-                ),
-            ]
+            _note(
+                st,
+                "abort.late",
+                "warn",
+                f"Too late to abort ({run.late_abort}): the target had already started.",
+            )
 
         run.committed = True
-        st.interruptionMs = round((time.perf_counter() - fence_start) * 1000, 1)
+        now = time.perf_counter()
+        run.start_ms = (now - start_sent_at) * 1000
+        st.interruptionMs = round((now - fence_start) * 1000, 1)
         await self._publish(st)  # journal the commit before anything else
         await auth.grant(wid, target, fenced.epoch)
         await self.host.kill(wid)
-        self._cache_code(run)
+        await asyncio.to_thread(self._cache_code, run)
         await self._finish(run, "COMPLETED")
 
     def _cache_code(self, run: _SourceRun) -> None:
@@ -768,7 +859,8 @@ class MigrationManager:
 
     async def _transfer(self, run: _SourceRun, record: CheckpointRecord, epoch: int, stage: Stage) -> None:
         st, t = run.status, self.timeouts
-        chunks = list(iter_chunks(run.outgoing / f"{record.id}.tar.gz", run.chunk_size))
+        path = run.outgoing / f"{record.id}.tar.gz"
+        chunks = await asyncio.to_thread(lambda: list(iter_chunks(path, run.chunk_size)))
         window = asyncio.Semaphore(t.window)
         retries = 0
         started = time.perf_counter()  # monotonic() only ticks every ~15 ms on Windows
@@ -805,7 +897,10 @@ class MigrationManager:
                         await self._progress(run)
                         return
                     log.warning("%s: target rejected %s[%d], resending", st.id, record.id, index)
-                raise MigrationError(f"chunk {index} of {record.id} failed after {t.retries + 1} attempts")
+                raise MigrationError(
+                    f"Checkpoint {record.id} could not be sent intact "
+                    f"(failed after {t.retries + 1} attempts)."
+                )
 
         try:
             async with asyncio.TaskGroup() as tg:
@@ -822,7 +917,9 @@ class MigrationManager:
         msg = await run.mailbox.expect(("validated",), self.timeouts.validate)
         assert isinstance(msg, MigValidated)
         if not msg.ok:
-            raise MigrationError(f"target failed to validate {', '.join(msg.failed or []) or 'checkpoints'}")
+            raise MigrationError(
+                f"The target could not verify {', '.join(msg.failed or []) or 'the checkpoints'}."
+            )
         for r in run.status.checkpoints:
             if r.sent:
                 self._mark(run, r, validated=True)
@@ -873,7 +970,8 @@ class MigrationManager:
             await self.ctx.peers.connect(target_id)
             if link := self.ctx.peers.link_quality(target_id):
                 run.status.link = link.link
-            records = [self._pack_code(run), *self._snapshot(run, [c.id for c in manifest.checkpoints], True)]
+            user_ids = [c.id for c in manifest.checkpoints]
+            records = [await self._pack_code(run), *await self._snapshot(run, user_ids, True)]
             have = await self._offer(run, manifest, records, self.ctx.authority.get(workload_id).epoch)
             run.status.bytesTotal = sum(r.sizeBytes for r in records if r.id not in have)
             for r in records:
@@ -1118,7 +1216,7 @@ class MigrationManager:
             return
         if isinstance(msg, MigAbort) and (src := self._sources.get(msg.migrationId)):
             if src.status.targetId == from_id and not src.committed:
-                self._abort_source(src, f"target aborted: {msg.reason}", hard=True)
+                self._abort_source(src, f"The target cancelled: {msg.reason}", hard=True)
             return
         if isinstance(msg, MigPrepare | MigChunk | MigFence | MigFenced | MigStart | MigAbort):
             async with self._target_lock:
@@ -1126,19 +1224,58 @@ class MigrationManager:
 
     async def _on_device_lost(self, event: DeviceLostEvent) -> None:
         self._linked.discard(event.deviceId)
+        task = asyncio.create_task(self._confirm_lost(event.deviceId))
+        self._tasks.append(task)
+        task.add_done_callback(lambda t: self._tasks.remove(t) if t in self._tasks else None)
+
+    async def _peer_reachable(self, peer: str) -> bool:
+        try:
+            await asyncio.wait_for(self.ctx.peers.connect(peer), self.timeouts.relink)
+        except Exception:
+            return False
+        return self.ctx.peers.link_quality(peer) is not None
+
+    async def _confirm_lost(self, peer: str) -> None:
+        """device.lost can be a blip (a slow heartbeat under load): reconnect once before giving up
+        on the migrations with that peer."""
+        involved = any(
+            s.status.targetId == peer and s.status.phase not in TERMINAL for s in self._sources.values()
+        ) or any(t.source_id == peer and t.status.phase not in TERMINAL for t in self._targets.values())
+        if not involved:
+            return
+        if await self._peer_reachable(peer):
+            log.info("link to %s came back; migrations with it continue", peer)
+            return
         for src in self._sources.values():
-            if src.status.targetId == event.deviceId and src.status.phase not in TERMINAL:
+            if src.status.targetId == peer and src.status.phase not in TERMINAL:
                 if not src.committed and not src.awaiting:
-                    self._abort_source(src, "link to target lost", hard=True)
+                    self._abort_source(src, "Lost the link to the target.", hard=True)
         async with self._target_lock:
             for tgt in list(self._targets.values()):
                 live = not tgt.started and not tgt.awaiting and tgt.status.phase not in TERMINAL
-                if tgt.source_id == event.deviceId and live:
-                    await self._discard_target(tgt, "link to source lost", notify=False)
+                if tgt.source_id == peer and live:
+                    await self._discard_target(
+                        tgt, "Lost the link to the source; the staged copy was discarded.", notify=False
+                    )
 
     # ------------------------------------------------------------------ target side
 
     async def _on_target_message(self, src: str, msg: PeerMessage) -> None:
+        try:
+            await self._handle_target_message(src, msg)
+        except Exception as e:
+            mid = getattr(msg, "migrationId", "")
+            reason, detail = _explain(e, None, "TRANSFERRING")
+            if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+                reason = "The target ran out of disk space."
+            log.exception("%s: target failed handling %s: %s", mid, msg.t, detail or reason)
+            if tgt := self._targets.get(mid):
+                await self._discard_target(tgt, reason, notify=True)
+            else:
+                with contextlib.suppress(Exception):
+                    await self._send(src, MigAbort(migrationId=mid, reason=reason))
+
+    async def _handle_target_message(self, src: str, msg: PeerMessage) -> None:
         if isinstance(msg, MigPrepare):
             await self._on_prepare(src, msg)
             return
@@ -1174,7 +1311,23 @@ class MigrationManager:
         elif isinstance(msg, MigStart):
             await self._on_start(tgt, msg)
         elif isinstance(msg, MigAbort):
-            await self._discard_target(tgt, f"source aborted: {msg.reason}", notify=False)
+            await self._discard_target(tgt, f"The source cancelled: {msg.reason}", notify=False)
+
+    def _disk_free(self, path: Path) -> int:
+        return shutil.disk_usage(path).free
+
+    def _stage_cached(
+        self, workload_id: str, staging: Path, records: dict[str, CheckpointRecord]
+    ) -> builtins.list[str]:
+        """Fresh staging folder, pre-filled with every offered unit this device already holds."""
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        have: builtins.list[str] = []
+        for cid, rec in records.items():
+            if (data := self._cached_unit(workload_id, rec)) is not None:
+                (staging / f"{cid}.tar.gz").write_bytes(data)
+                have.append(cid)
+        return have
 
     def _cached_unit(self, workload_id: str, record: CheckpointRecord) -> bytes | None:
         """A unit with this exact hash that this device already holds, or None."""
@@ -1215,15 +1368,23 @@ class MigrationManager:
             return
 
         chunk_size = msg.chunkSize or CHUNK_SIZE
-        staging = self.store.workload_dir(wid) / "staging" / msg.migrationId
-        shutil.rmtree(staging, ignore_errors=True)
-        staging.mkdir(parents=True)
         records = {r.id: r for r in msg.checkpoints}
-        have: builtins.list[str] = []
-        for cid, rec in records.items():
-            if (data := self._cached_unit(wid, rec)) is not None:
-                (staging / f"{cid}.tar.gz").write_bytes(data)
-                have.append(cid)
+        staging = self.store.workload_dir(wid) / "staging" / msg.migrationId
+        have = await asyncio.to_thread(self._stage_cached, wid, staging, records)
+        incoming = sum(r.sizeBytes for cid, r in records.items() if cid not in have)
+        # Staged units, then the committed copy, then the unpacked work folder: about 3x, plus the
+        # manifest's own disk need, before anything is sent.
+        needed = incoming * 3 + manifest.minDiskMb * 2**20
+        free = self._disk_free(staging)
+        if free < needed:
+            shutil.rmtree(staging, ignore_errors=True)
+            text = (
+                f"Not enough disk space on the target: {needed / 2**20:.0f} MB needed, "
+                f"{free / 2**20:.0f} MB free."
+            )
+            reasons = [Reason(code="disk.full", severity="block", text=text)]
+            await self._send(src, MigReady(migrationId=msg.migrationId, ok=False, reasons=reasons))
+            return
         status = MigrationStatus(
             id=msg.migrationId,
             workloadId=wid,
@@ -1285,15 +1446,19 @@ class MigrationManager:
         tgt.status.bytesDone += len(data)
         if part.complete:
             try:
-                unit = part.finalize()
-                unpack_unit(unit)
-                (tgt.staging / f"{cid}.tar.gz").write_bytes(unit)
+                await asyncio.to_thread(self._finalize_unit, part, tgt.staging / f"{cid}.tar.gz")
                 tgt.validated.add(cid)
             except (ChunkError, ValueError) as e:
                 log.warning("%s: checkpoint %s failed validation: %s", tgt.status.id, cid, e)
                 tgt.failed.add(cid)
             self._target_marks(tgt)
             await self._maybe_validated(tgt)
+
+    @staticmethod
+    def _finalize_unit(part: Reassembler, path: Path) -> None:
+        unit = part.finalize()  # whole-unit SHA-256
+        unpack_unit(unit)  # a valid, safe archive
+        path.write_bytes(unit)  # OSError (e.g. disk full) propagates: the migration is aborted
 
     def _target_marks(self, tgt: _TargetRun) -> None:
         def sent(cid: str) -> bool:
@@ -1354,16 +1519,7 @@ class MigrationManager:
         await self._publish(st)
         granted = started = False
         try:
-            self.store.delete(wid)
-            for cid in tgt.records:
-                if cid != CODE_UNIT:
-                    self.store.put(wid, cid, (tgt.staging / f"{cid}.tar.gz").read_bytes())
-            code = (tgt.staging / f"{CODE_UNIT}.tar.gz").read_bytes()
-            code_dir = self.store.workload_dir(wid) / "code"
-            shutil.rmtree(code_dir, ignore_errors=True)
-            unpack_unit(code, files_dest=code_dir)
-            self.cache_dir(wid).mkdir(parents=True, exist_ok=True)
-            (self.cache_dir(wid) / f"{CODE_UNIT}.tar.gz").write_bytes(code)
+            code_dir = await asyncio.to_thread(self._commit_staged, tgt)
             self.host.register(tgt.manifest, code_dir)
             st.authority = await self.ctx.authority.grant(wid, self.ctx.device_id, msg.epoch)
             granted = True
@@ -1376,14 +1532,33 @@ class MigrationManager:
                 await self.host.kill(wid)
             if granted:
                 await self.ctx.authority.release(wid)
-            await self._discard_target(tgt, f"start failed: {e}", notify=False)
-            await refuse(str(e) or type(e).__name__)
+            if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+                why = "the target ran out of disk space"
+            else:
+                why = _short(str(e) or type(e).__name__, 120)
+            await self._discard_target(tgt, f"Could not start the workload: {why}.", notify=False)
+            await refuse(why)
             return
         tgt.started = True
         await self._send(tgt.source_id, MigStarted(migrationId=st.id, ok=True))
         shutil.rmtree(tgt.staging, ignore_errors=True)
         st.phase, st.endedAt = "COMPLETED", time.time()
         await self._publish(st)
+
+    def _commit_staged(self, tgt: _TargetRun) -> Path:
+        """Validated staging -> checkpoint store, unpacked code and code cache. Returns the code folder."""
+        wid = tgt.manifest.id
+        self.store.delete(wid)
+        for cid, record in tgt.records.items():
+            if cid != CODE_UNIT:  # verified on arrival: move, do not re-hash (keeps the freeze short)
+                self.store.adopt(wid, cid, tgt.staging / f"{cid}.tar.gz", record)
+        code = (tgt.staging / f"{CODE_UNIT}.tar.gz").read_bytes()
+        code_dir = self.store.workload_dir(wid) / "code"
+        shutil.rmtree(code_dir, ignore_errors=True)
+        unpack_unit(code, files_dest=code_dir)
+        self.cache_dir(wid).mkdir(parents=True, exist_ok=True)
+        (self.cache_dir(wid) / f"{CODE_UNIT}.tar.gz").write_bytes(code)
+        return code_dir
 
     async def _discard_target(self, tgt: _TargetRun, reason: str, notify: bool) -> None:
         """Drop the staged copy. If our copy already started (the source never got mig.started),
@@ -1431,3 +1606,26 @@ def _metric(
 
 
 _DIGEST = DigestSigner()
+
+
+def _short(text: str, limit: int = 160) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _explain(e: BaseException, abort_reason: str | None, phase: Phase) -> tuple[str, str]:
+    """(short message for the dashboard, technical detail) for a failed migration."""
+    where = phase.lower().replace("_", " ")
+    if abort_reason:
+        return _short(abort_reason), ""
+    if isinstance(e, MigrationError):
+        return _short(str(e)), e.detail
+    if isinstance(e, TimeoutError):
+        return f"The target did not answer in time ({where}).", ""
+    if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+        return "This device ran out of disk space.", str(e)
+    if isinstance(e, ConnectionError | OSError) or "connect" in str(e).lower():
+        return f"Lost the link to the target ({where}).", f"{type(e).__name__}: {e}"
+    if isinstance(e, KeyError):
+        return "The workload is no longer registered on this device.", repr(e)
+    return f"Unexpected error ({where}).", f"{type(e).__name__}: {e}"

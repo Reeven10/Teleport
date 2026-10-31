@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
@@ -39,7 +41,8 @@ def build_sdk_router(ctx: Context) -> APIRouter:
         if len(data) > MAX_UNIT_BYTES:
             raise HTTPException(413, "checkpoint unit too large")
         try:
-            return ctx.checkpoints.put(workload_id, checkpoint_id, data)
+            # Hashing and validating a unit can take a while: keep the event loop free.
+            return await asyncio.to_thread(ctx.checkpoints.put, workload_id, checkpoint_id, data)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 

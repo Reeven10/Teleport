@@ -263,6 +263,7 @@ class FakeWorkloadHost:
         self.fail_start = False
         self.start_delay = 0.0
         self.blobs: dict[str, int] = {}  # checkpoint id -> size of a deterministic binary state
+        self.exit_codes: dict[str, int] = {}
         self.dead = False
         self._file = ctx.settings.home / "fake_host.json"
         self._interrupted: set[str] = set()
@@ -288,6 +289,11 @@ class FakeWorkloadHost:
         self.states[wid] = state
         self.world.set(wid, self.ctx.device_id, state == "running")
         self._save()
+
+    def exit(self, wid: str, code: int) -> None:
+        """The workload process ends on its own (crash or done)."""
+        self.exit_codes[wid] = code
+        self._set(wid, "exited")
 
     def interrupted(self) -> set[str]:
         return set(self._interrupted)
@@ -315,7 +321,7 @@ class FakeWorkloadHost:
             workloadId=workload_id,
             state=self.states[workload_id],
             pid=None,
-            exitCode=None,
+            exitCode=self.exit_codes.get(workload_id),
             startedAt=None,
             restored=[],
             logTail=[],
