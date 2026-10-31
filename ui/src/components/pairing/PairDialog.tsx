@@ -7,11 +7,12 @@ import { formatArch, formatOs } from '../../utils/formatters.ts';
 interface PairDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  initialAddress?: string;
 }
 
-export function PairDialog({ isOpen, onClose }: PairDialogProps) {
+export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps) {
   const { state, addPairedDevice, selectPeer } = useTeleport();
-  const [address, setAddress] = useState('192.168.1.102:8765');
+  const [address, setAddress] = useState(initialAddress || '192.168.1.102:8765');
   const [pin, setPin] = useState('749218');
   const [localPin] = useState('381904'); // Local PIN for the peer to enter
   const [isSubmitting, setIsSubmitting] = useState(false);

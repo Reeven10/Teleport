@@ -1,0 +1,24 @@
+id: gpu-only-job
+name: Neural Raytracer & CUDA Compute
+command: python main.py
+runtime:
+  name: python
+  minVersion: "3.11"
+arch:
+  - x86_64
+os:
+  - linux
+  - windows
+minRamMb: 2048
+minCpuCores: 4
+minDiskMb: 500
+needsGpu: true
+remoteCapable: true
+libs:
+  - torch-cuda
+checkpoints:
+  - id: frame_state
+    name: Neural Render Buffer State
+    paths:
+      - frame_state.json
+

@@ -134,4 +134,71 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await page.getByTestId('btn-consent-allow').click();
     await expect(consentModal).not.toBeVisible();
   });
+
+  test('scenario 5: history page displays devices, migrations, and post-mortem replay', async ({
+    page,
+  }) => {
+    await page.goto('/history');
+
+    // 1. Verify History Header
+    await expect(page.getByText('Migration & Audit History')).toBeVisible();
+
+    // 2. Known peer device list
+    const devCardB = page.getByTestId('history-device-device-b');
+    await expect(devCardB).toBeVisible();
+    await expect(devCardB).toContainText('Dell XPS 15');
+
+    // Reconnect action pre-fills pairing dialog
+    await page.getByTestId('btn-reconnect-device-b').click();
+    await expect(page.getByText('Pair New Device')).toBeVisible();
+    await page.getByRole('button', { name: /Close/i }).click();
+
+    // 3. Migration table and inspection replay
+    const migRow = page.getByTestId('migration-row-mig-2026-001');
+    await expect(migRow).toBeVisible();
+    await expect(migRow).toContainText('wl-token-trainer');
+
+    // Open detail replay modal
+    await page.getByTestId('btn-inspect-mig-2026-001').click();
+    const detailModal = page.getByTestId('migration-detail-modal');
+    await expect(detailModal).toBeVisible();
+    await expect(page.getByTestId('detail-interruption')).toContainText('42 ms');
+    await expect(page.getByTestId('detail-epoch')).toContainText('Epoch 2');
+
+    // Close detail modal
+    await page.getByTestId('btn-close-detail').click();
+    await expect(detailModal).not.toBeVisible();
+
+    // 4. Decision Log Panel with STAY decisions
+    await expect(page.getByTestId('decision-log-panel')).toBeVisible();
+    await page.getByTestId('filter-stay-decisions').click();
+    await expect(page.getByText(/No Action Taken \(Stayed on Source\)/i).first()).toBeVisible();
+  });
+
+  test('scenario 6: settings page round-trip updates and saves operational policies', async ({
+    page,
+  }) => {
+    await page.goto('/settings');
+
+    // 1. Verify Settings Header
+    await expect(page.getByText('Teleport Agent Settings & Policies')).toBeVisible();
+
+    // 2. Select Auto Mode
+    await page.getByTestId('radio-mode-auto').check();
+
+    // 3. Change Low Battery Limit to 18%
+    const batteryInput = page.getByTestId('input-battery-threshold');
+    await batteryInput.fill('18');
+
+    // 4. Select Preferred Link
+    await page.getByTestId('select-preferred-link').selectOption('cable');
+
+    // 5. Submit Settings
+    await page.getByTestId('btn-save-settings').click();
+
+    // 6. Verify Save Confirmation Banner
+    const successBanner = page.getByTestId('settings-save-success');
+    await expect(successBanner).toBeVisible();
+    await expect(successBanner).toContainText('Settings saved successfully');
+  });
 });
