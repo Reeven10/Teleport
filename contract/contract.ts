@@ -9,8 +9,8 @@ export type RunState = 'idle' | 'running' | 'paused' | 'stopped' | 'exited';
 export type Phase = 'IDLE' | 'CONNECTING' | 'EVALUATING' | 'TRANSFERRING' | 'VALIDATING' | 'FENCING' | 'STARTING_TARGET' | 'COMPLETED' | 'ROLLING_BACK' | 'ROLLED_BACK' | 'REMOTE_ACCESS' | 'FAILED';
 
 export interface DeviceInfo { id: string; name: string; os: OsName; arch: Arch; cpuCores: number; ramMb: number; gpu: string | null; diskFreeMb: number; runtimes: Record<string, string>; libs: string[]; addrs: { addr: string; link: LinkType }[]; agentVersion: string; simulated?: boolean }
-export interface Stats { deviceId: string; ts: number; cpuPct: number; memPct: number; memFreeMb: number; diskFreeMb: number; battery: { pct: number; charging: boolean } | null; online: boolean; simulated?: boolean }
-export interface LinkQuality { peerId: string; link: LinkType; rttMs: number; mbps: number; lossPct: number; ts: number }
+export interface Stats { deviceId: string; ts: number; cpuPct: number; memPct: number; memFreeMb: number; diskFreeMb: number; battery: { pct: number; charging: boolean } | null; online: boolean; simulated?: boolean; stale?: boolean }
+export interface LinkQuality { peerId: string; link: LinkType; rttMs: number; mbps: number; lossPct: number; ts: number; online?: boolean; simulated?: boolean }
 export interface CheckpointDef { id: string; name: string; paths: string[] }
 export interface WorkloadManifest { id: string; name: string; command: string; runtime: { name: string; minVersion: string }; arch: Arch[]; os: OsName[]; minRamMb: number; minCpuCores: number; minDiskMb: number; needsGpu: boolean; libs: string[]; checkpoints: CheckpointDef[]; remoteCapable: boolean }
 export interface CheckpointRecord { id: string; seq: number; sizeBytes: number; sha256: string; createdAt: number; sent?: boolean; validated?: boolean }
@@ -18,8 +18,9 @@ export interface Reason { code: string; severity: 'pass' | 'warn' | 'block'; tex
 export interface FeasibilityResult { workloadId: string; sourceId: string; targetId: string; decision: Decision; reasons: Reason[]; estTransferSec: number; estInterruptionMs: number; ts: number }
 export interface Authority { workloadId: string; holder: string | null; epoch: number; state: AuthorityState }
 export interface MigrationStatus { id: string; workloadId: string; sourceId: string; targetId: string; phase: Phase; trigger: Trigger; link: LinkType; decision?: Decision; reasons: Reason[]; checkpoints: CheckpointRecord[]; bytesTotal: number; bytesDone: number; authority: Authority; interruptionMs?: number; error?: string; startedAt: number; endedAt?: number; metrics?: MigrationMetrics }
-export interface CheckpointMetric { id: string; stage: 'initial' | 'delta' | 'precopy'; sizeBytes: number; chunks: number; retries: number; transferMs: number; mbps: number; skipped: boolean }
-export interface MigrationMetrics { migrationId: string; link: LinkType; chunkSize: number; durationMs: number; interruptionMs?: number; bytesTotal: number; bytesDone: number; bytesSkipped: number; throughputMbps: number; checkpoints: CheckpointMetric[]; ts: number }
+export interface CheckpointMetric { id: string; stage: 'initial' | 'catchup' | 'delta' | 'precopy'; sizeBytes: number; chunks: number; retries: number; transferMs: number; mbps: number; skipped: boolean }
+export interface MigrationMetrics { migrationId: string; link: LinkType; chunkSize: number; durationMs: number; interruptionMs?: number; bytesTotal: number; bytesDone: number; bytesSkipped: number; throughputMbps: number; checkpoints: CheckpointMetric[]; ts: number; cutover?: CutoverTiming }
+export interface CutoverTiming { catchupRounds: number; fenceMs: number; deltaBytes: number; deltaMs: number; startMs: number }
 export interface AuthorityConflict { workloadId: string; deviceId: string; peerId: string; localEpoch: number; remoteEpoch: number; winner: string; stopped: string; reason: string; ts: number }
 export interface Recommendation { workloadId: string; trigger: Trigger; targetId: string | null; decision: Decision; reasons: Reason[]; auto: boolean; ts: number }
 export interface RemoteSession { id: string; workloadId: string; hostId: string; viewerId: string; consent: boolean; fps: number; ts: number }
@@ -41,7 +42,7 @@ export type PeerMessage =
   | { t: 'mig.start'; migrationId: string; epoch: number }
   | { t: 'mig.started'; migrationId: string; ok: boolean; error?: string }
   | { t: 'mig.abort'; migrationId: string; reason: string }
-  | { t: 'auth.leases'; leases: Authority[] };
+  | { t: 'auth.leases'; leases: Authority[]; conflicts?: AuthorityConflict[] };
 
 // Event bus (inside one agent) and the /ws/events stream
 export type BusEvent =

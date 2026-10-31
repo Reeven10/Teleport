@@ -105,6 +105,7 @@ class Stats(ContractModel):
     battery: Battery | None
     online: bool
     simulated: bool | None = None
+    stale: bool | None = None  # no fresh sample from this device for a while (last values kept)
 
 
 class LinkQuality(ContractModel):
@@ -114,6 +115,8 @@ class LinkQuality(ContractModel):
     mbps: float
     lossPct: float
     ts: float
+    online: bool | None = None  # False while the peer is unreachable
+    simulated: bool | None = None  # values come from fault injection or a simulator
 
 
 class CheckpointDef(ContractModel):
@@ -179,13 +182,23 @@ class Authority(ContractModel):
 
 class CheckpointMetric(ContractModel):
     id: str
-    stage: Literal["initial", "delta", "precopy"]
+    stage: Literal["initial", "catchup", "delta", "precopy"]
     sizeBytes: int
     chunks: int
     retries: int
     transferMs: float
     mbps: float
     skipped: bool
+
+
+class CutoverTiming(ContractModel):
+    """Where the interruption (pause to mig.started ok) went."""
+
+    catchupRounds: int  # live delta rounds before freezing
+    fenceMs: float  # pause + fence + final checkpoint of manifest paths
+    deltaBytes: int  # sent while frozen
+    deltaMs: float  # frozen delta transfer + validation
+    startMs: float  # mig.start until mig.started ok (target restore + launch)
 
 
 class MigrationMetrics(ContractModel):
@@ -200,6 +213,7 @@ class MigrationMetrics(ContractModel):
     throughputMbps: float
     checkpoints: list[CheckpointMetric]
     ts: float
+    cutover: CutoverTiming | None = None
 
 
 class AuthorityConflict(ContractModel):
@@ -377,6 +391,7 @@ class MigAbort(ContractModel):
 class AuthLeases(ContractModel):
     t: Literal["auth.leases"] = "auth.leases"
     leases: list[Authority]
+    conflicts: list[AuthorityConflict] | None = None  # recently resolved, so both sides report them
 
 
 PeerMessage = Annotated[

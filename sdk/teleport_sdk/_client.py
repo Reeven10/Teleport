@@ -42,6 +42,7 @@ class Client:
         self.restore_dir = Path(restore_dir) if restore_dir else None
         self.local_dir = Path(local_dir or ".teleport-local")
         self.poll_interval = poll_interval
+        self.compress_level = int(os.environ.get("TELEPORT_COMPRESS_LEVEL", "6"))
         self._fence_callbacks: list[FenceCallback] = []
         self._stop = threading.Event()
         self._closed = threading.Event()
@@ -69,7 +70,7 @@ class Client:
         self, checkpoint_id: str, state: State | None = None, files: Iterable[str | Path] | None = None
     ) -> dict[str, Any]:
         """Save one checkpoint unit. `files` are paths relative to the working folder."""
-        unit = pack_unit(state, collect_files(files or [], Path.cwd()))
+        unit = pack_unit(state, collect_files(files or [], Path.cwd()), level=self.compress_level)
         if self.standalone:
             path = self.local_dir / "checkpoints" / f"{checkpoint_id}.tar.gz"
             path.parent.mkdir(parents=True, exist_ok=True)

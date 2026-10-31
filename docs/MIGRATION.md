@@ -84,3 +84,100 @@ loser kills its copy and adopts the winner's lease, and both publish `authority.
 `MigrationStatus.metrics` and `GET /api/migrations/{id}/metrics` give the link type, chunk size, total
 duration, interruption (pause to `mig.started ok`), bytes done, total and skipped, overall throughput,
 and per checkpoint transfer (stage initial, delta or precopy; chunks, retries, ms, Mbps, skipped).
+
+## Cutover (the freeze window)
+
+The workload only stops between the pause and `mig.started ok` (`interruptionMs`). To keep that short:
+
+1. **Full transfer while live.** Every unit the target does not already hold (by SHA-256) is sent while
+   the workload runs and keeps authority.
+2. **Catch-up rounds, still live.** Up to 3 rounds: ask for a fresh checkpoint, resend only the units
+   whose hash changed. Stop when a round has at most 64 KB left (`Timeouts.catchup_rounds` / `catchup_bytes`).
+3. **Freeze.** Pause, fence (epoch + 1), pack manifest paths (only if the manifest has any), send only
+   the units that changed since the last round. If nothing changed, no extra round trip.
+4. **Start.** The target moves the already verified units into its store (a rename, no re-hash),
+   unpacks the code, takes authority, starts, and answers.
+
+`MigrationMetrics.cutover` splits the interruption into `fenceMs`, `deltaMs` (with `deltaBytes`) and
+`startMs`, plus `catchupRounds`.
+
+Measured on this laptop over the real peer link (P2 transport, AES-256-GCM), `scripts/bench_transfer.py`,
+20 MB checkpoint, 256 KB chunks: **interruption 53 to 59 ms** (fence 7, delta 4, target start 37 to 43).
+That was about 155 ms before the rename-commit and the empty-delta skip.
+
+counter_job on real agent subprocesses (as with `dev:two`), migrated A->B->A->B (epochs 1 to 4, return
+trips skip the unchanged units): **interruption 183 to 193 ms**. Fence about 20 ms (suspend + fence +
+pack the journal path), delta about 52 ms (four small units, sent concurrently), target start about
+107 ms (unpack + launch a Python process on Windows). Total migration about 1.0 to 1.25 s.
+
+## Tuning
+
+Defaults: `chunkSizeKb` 256, window 8 chunks in flight, gzip level 6 (`compressLevel`).
+
+| chunk KB | window 4 | window 8 | window 16 |
+| --- | --- | --- | --- |
+| 64 | 38.6 Mbps | 54.4 | 40.5 |
+| 128 | 47.1 | 41.4 | 74.6 |
+| 256 | 79.4 | 79.6 | 77.1 |
+| 512 | 82.6 | 81.1 | 80.6 |
+
+These are loopback numbers, CPU-bound and noisy (±20 %). Below 256 KB the per-chunk overhead dominates.
+256 and 512 are equal, and 256 resends half as much after a corrupt chunk. On a real link with RTT, a
+bigger window helps: raise `Timeouts.window`. The ceiling (~80 Mbps) comes from the transport encoding:
+the chunk is base64 inside JSON, encrypted, then base64 again in a text frame (issue P2-13).
+
+Compression: units are tar.gz already, so the wire adds none. `compressLevel` 0 (store) is fastest
+for data that is already compressed (models, media). 1 is a good middle ground. 6 is the default.
+It applies to agent-packed and SDK-packed units (`TELEPORT_COMPRESS_LEVEL` for workloads).
+
+Event loop: packing, hashing, snapshots, chunking, the target's whole-unit check and the commit run in
+worker threads (`asyncio.to_thread`), so heartbeats, stats and other migrations are not blocked.
+
+## Rollback rules
+
+| When it fails | Result | Authority | Source | Target |
+| --- | --- | --- | --- | --- |
+| Before anything was offered (unreachable, workload gone) | ROLLED_BACK | unchanged | keeps running | nothing |
+| Feasibility says STAY | FAILED (with reasons) | unchanged | keeps running | nothing |
+| During transfer or validation: lost link (after a 5 s reconnect try), timeout, corrupt chunk after 3 resends, target refusal, disk full, abort | ROLLED_BACK | unchanged | keeps running | staging discarded |
+| The workload exits during the transfer | ROLLED_BACK | unchanged | stays stopped (it exited) | staging discarded |
+| During the freeze, before `mig.start` | ROLLED_BACK | FENCED to SOURCE, epoch + 1 | resumes (live state) | staging discarded |
+| `mig.start` out, no answer (link lost, timeout) | waits in STARTING_TARGET | stays FENCED | stays paused | decides by itself |
+| ...then the target's lease shows it holds the workload | COMPLETED | moves to target | stopped | running |
+| ...then the target's lease shows it does not | ROLLED_BACK | FENCED to SOURCE, epoch + 1 | resumes | discarded |
+| `mig.started ok=false` (start failed) | ROLLED_BACK | FENCED to SOURCE, epoch + 1 | resumes | discarded, lease released |
+| User abort after `mig.start` | waits for the answer; COMPLETED (with an `abort.late` warning) or ROLLED_BACK | | | |
+| Any restart in between | see "Continuity and recovery" above | | | |
+
+Never two copies: the source only resumes when the target provably does not hold the workload, and
+the target only starts when every unit is validated, the source is fenced and the epoch matches.
+
+## Failure messages
+
+`MigrationStatus.error` is one short sentence for the dashboard (10 to 160 characters, no stack
+traces or device ids), for example:
+
+- "Lost the link to the target (transferring)."
+- "Checkpoint c3 could not be sent intact (failed after 4 attempts)."
+- "The target refused: Not enough disk space on the target: 61 MB needed, 0 MB free."
+- "The target cancelled: The target ran out of disk space."
+- "The target could not start the workload: simulated start failure."
+- "The workload stopped during the transfer (exit code 3); nothing to hand over."
+- "The target did not answer in time (validating)."
+- "Aborted by user."
+
+The technical detail, when there is one, is in the reasons as `error.detail` and in the agent log.
+A `rollback` reason repeats the message with severity block.
+
+## Known limits
+
+- **Cooperative checkpoints only.** State moves only through what the workload saves with the SDK
+  (`teleport.checkpoint`, `on_fence`) and the manifest's paths. There is **no live process memory
+  snapshot** (no CRIU yet): anything the job keeps only in memory and has not checkpointed is lost.
+  Progress between the final checkpoint and the pause (a few milliseconds) is also lost.
+- After an agent crash, the source resumes from its last checkpoint, not from the live process.
+- A real network split during STARTING_TARGET can leave the source waiting (stopped) until the link
+  returns or an operator aborts. If the operator aborts while the target did start, the split-brain
+  guard stops the target once they reconnect (lower epoch).
+- Pre-copy sends what is already saved; it does not ask the job for a fresh checkpoint.
+- Throughput is capped by the transport encoding (P2-13), not by the migration engine.

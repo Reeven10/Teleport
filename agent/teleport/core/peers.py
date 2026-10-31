@@ -1,5 +1,5 @@
-"""Known peer ids, kept current from bus events and peer traffic, so periodic senders (stats relay,
-lease sync) never call peers.list_peers() in a hot loop: with the P2 device service that call
+"""Known peer ids, kept current from bus events and peer traffic, so periodic senders (lease
+sync) never call peers.list_peers() in a hot loop: with the P2 device service that call
 re-probes the local device synchronously (~0.4 s, issue P2-7) and stalls the event loop."""
 
 from __future__ import annotations

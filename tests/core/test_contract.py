@@ -35,3 +35,25 @@ def test_discriminated_unions_roundtrip() -> None:
         )
     )
     assert BusEventAdapter.validate_json(ev.model_dump_json()) == ev
+
+
+def test_link_quality_and_stats_optional_flags() -> None:
+    from contract.contract import LinkQuality
+
+    link = LinkQuality(peerId="b", link="wifi", rttMs=1, mbps=10, lossPct=100, ts=1, online=False)
+    assert link.model_dump()["online"] is False and "simulated" not in link.model_dump()
+    assert (
+        "online" not in LinkQuality(peerId="b", link="wifi", rttMs=1, mbps=10, lossPct=0, ts=1).model_dump()
+    )
+    stale = Stats(
+        deviceId="a",
+        ts=1,
+        cpuPct=1,
+        memPct=1,
+        memFreeMb=1,
+        diskFreeMb=1,
+        battery=None,
+        online=False,
+        stale=True,
+    )
+    assert stale.model_dump()["stale"] is True

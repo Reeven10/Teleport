@@ -53,7 +53,8 @@ def _add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
     tar.addfile(info, io.BytesIO(data))
 
 
-def pack_unit(state: State | None, files: Iterable[tuple[str, Path]] = ()) -> bytes:
+def pack_unit(state: State | None, files: Iterable[tuple[str, Path]] = (), level: int = 6) -> bytes:
+    """Deterministic tar.gz. `level` is the gzip level (0 = store only, the fastest)."""
     entries: list[tuple[str, bytes]] = []
     if isinstance(state, bytes):
         entries.append((STATE_BIN, state))
@@ -62,7 +63,7 @@ def pack_unit(state: State | None, files: Iterable[tuple[str, Path]] = ()) -> by
     entries += [(name, path.read_bytes()) for name, path in files]
     buf = io.BytesIO()
     with (
-        gzip.GzipFile(filename="", fileobj=buf, mode="wb", mtime=0) as gz,
+        gzip.GzipFile(filename="", fileobj=buf, mode="wb", mtime=0, compresslevel=level) as gz,
         tarfile.open(fileobj=gz, mode="w", format=tarfile.GNU_FORMAT) as tar,
     ):
         for name, data in sorted(entries):

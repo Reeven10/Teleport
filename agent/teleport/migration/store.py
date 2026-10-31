@@ -86,11 +86,29 @@ class CheckpointStore:
             (folder / META).write_text(record.model_dump_json(), "utf-8")
             return record
 
+    def adopt(
+        self, workload_id: str, checkpoint_id: str, path: Path, record: CheckpointRecord
+    ) -> CheckpointRecord:
+        """Move an already verified unit file into the store (no re-read, re-hash or re-validate).
+
+        The caller guarantees `path` holds exactly `record` (the migration target verified every
+        chunk and the whole-unit SHA-256 on arrival). Same filesystem, so this is a rename.
+        """
+        with self._lock:
+            folder = self.unit_dir(workload_id, checkpoint_id)
+            folder.mkdir(parents=True, exist_ok=True)
+            stored = record.model_copy(
+                update={"seq": self._next_seq(workload_id), "sent": None, "validated": None}
+            )
+            path.replace(folder / UNIT)
+            (folder / META).write_text(stored.model_dump_json(), "utf-8")
+            return stored
+
     def pack_paths(
-        self, workload_id: str, checkpoint_id: str, workdir: Path, paths: Iterable[str]
+        self, workload_id: str, checkpoint_id: str, workdir: Path, paths: Iterable[str], level: int = 6
     ) -> CheckpointRecord:
         """Agent-side checkpoint of manifest paths (relative to the workload's working folder)."""
-        return self.put(workload_id, checkpoint_id, pack_unit(None, collect_files(paths, workdir)))
+        return self.put(workload_id, checkpoint_id, pack_unit(None, collect_files(paths, workdir), level))
 
     def read(self, workload_id: str, checkpoint_id: str) -> bytes | None:
         path = self.unit_path(workload_id, checkpoint_id)
