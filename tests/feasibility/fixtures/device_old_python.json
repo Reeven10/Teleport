@@ -1,0 +1,19 @@
+{
+  "id": "dev-old-python",
+  "name": "Debian-Buster-Old",
+  "os": "linux",
+  "arch": "x86_64",
+  "cpuCores": 4,
+  "ramMb": 8192,
+  "gpu": null,
+  "diskFreeMb": 80000,
+  "runtimes": {
+    "python": "3.9.18"
+  },
+  "libs": ["numpy", "requests"],
+  "addrs": [
+    {"addr": "192.168.1.102:8765", "link": "cable"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

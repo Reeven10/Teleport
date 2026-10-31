@@ -1,0 +1,20 @@
+{
+  "id": "dev-mac-laptop",
+  "name": "MacBook-Pro-M2",
+  "os": "macos",
+  "arch": "arm64",
+  "cpuCores": 10,
+  "ramMb": 32768,
+  "gpu": "Apple M2 Pro (16-core)",
+  "diskFreeMb": 450000,
+  "runtimes": {
+    "python": "3.11.8",
+    "node": "20.10.0"
+  },
+  "libs": ["numpy", "torch", "pandas", "requests"],
+  "addrs": [
+    {"addr": "192.168.1.51:8765", "link": "wifi"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

@@ -1,0 +1,19 @@
+{
+  "id": "dev-low-battery",
+  "name": "Dell-Latitude-Draining",
+  "os": "windows",
+  "arch": "x86_64",
+  "cpuCores": 4,
+  "ramMb": 8192,
+  "gpu": null,
+  "diskFreeMb": 60000,
+  "runtimes": {
+    "python": "3.11.4"
+  },
+  "libs": ["numpy", "requests"],
+  "addrs": [
+    {"addr": "192.168.1.75:8765", "link": "wifi"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

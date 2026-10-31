@@ -1,0 +1,21 @@
+{
+  "id": "dev-win-laptop",
+  "name": "ThinkPad-X1-Carbon",
+  "os": "windows",
+  "arch": "x86_64",
+  "cpuCores": 8,
+  "ramMb": 16384,
+  "gpu": null,
+  "diskFreeMb": 250000,
+  "runtimes": {
+    "python": "3.11.9",
+    "node": "20.11.0"
+  },
+  "libs": ["numpy", "pandas", "requests", "scipy"],
+  "addrs": [
+    {"addr": "192.168.1.50:8765", "link": "wifi"},
+    {"addr": "10.0.0.50:8765", "link": "cable"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

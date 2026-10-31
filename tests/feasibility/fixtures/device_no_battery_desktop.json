@@ -1,0 +1,19 @@
+{
+  "id": "dev-desktop-x86",
+  "name": "Linux-Tower-Desktop",
+  "os": "linux",
+  "arch": "x86_64",
+  "cpuCores": 16,
+  "ramMb": 32768,
+  "gpu": null,
+  "diskFreeMb": 500000,
+  "runtimes": {
+    "python": "3.11.5"
+  },
+  "libs": ["numpy", "requests", "pandas"],
+  "addrs": [
+    {"addr": "192.168.1.15:8765", "link": "cable"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

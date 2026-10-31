@@ -1,0 +1,25 @@
+{
+  "id": "w-remote-gui",
+  "name": "Desktop GUI CAD Studio",
+  "command": "python cad_gui.py",
+  "runtime": {
+    "name": "python",
+    "minVersion": "3.11"
+  },
+  "arch": ["x86_64"],
+  "os": ["linux"],
+  "minRamMb": 4096,
+  "minCpuCores": 4,
+  "minDiskMb": 2000,
+  "needsGpu": true,
+  "libs": ["numpy"],
+  "checkpoints": [
+    {
+      "id": "c1",
+      "name": "project",
+      "paths": ["project.cad"]
+    }
+  ],
+  "remoteCapable": true
+}
+

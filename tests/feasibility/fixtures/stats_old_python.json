@@ -1,0 +1,14 @@
+{
+  "deviceId": "dev-old-python",
+  "ts": 1700000000.0,
+  "cpuPct": 20.0,
+  "memPct": 40.0,
+  "memFreeMb": 4096,
+  "diskFreeMb": 75000,
+  "battery": {
+    "pct": 70.0,
+    "charging": false
+  },
+  "online": true
+}
+

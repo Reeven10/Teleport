@@ -1,0 +1,25 @@
+{
+  "id": "w-x86-bin",
+  "name": "x86-Only Binary Service",
+  "command": "./bin/x86_worker --threads 2",
+  "runtime": {
+    "name": "python",
+    "minVersion": "3.11"
+  },
+  "arch": ["x86_64"],
+  "os": ["linux", "windows"],
+  "minRamMb": 2048,
+  "minCpuCores": 2,
+  "minDiskMb": 500,
+  "needsGpu": false,
+  "libs": ["numpy"],
+  "checkpoints": [
+    {
+      "id": "c1",
+      "name": "data",
+      "paths": ["data.bin"]
+    }
+  ],
+  "remoteCapable": true
+}
+

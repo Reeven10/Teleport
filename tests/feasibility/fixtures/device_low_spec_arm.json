@@ -1,0 +1,19 @@
+{
+  "id": "dev-low-arm",
+  "name": "Raspberry-Pi-Zero2",
+  "os": "linux",
+  "arch": "arm64",
+  "cpuCores": 1,
+  "ramMb": 512,
+  "gpu": null,
+  "diskFreeMb": 1500,
+  "runtimes": {
+    "python": "3.11.2"
+  },
+  "libs": ["requests"],
+  "addrs": [
+    {"addr": "192.168.1.99:8765", "link": "wifi"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

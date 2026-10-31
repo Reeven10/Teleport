@@ -1,0 +1,14 @@
+{
+  "deviceId": "dev-low-battery",
+  "ts": 1700000000.0,
+  "cpuPct": 45.0,
+  "memPct": 65.0,
+  "memFreeMb": 3072,
+  "diskFreeMb": 40000,
+  "battery": {
+    "pct": 10.0,
+    "charging": false
+  },
+  "online": true
+}
+

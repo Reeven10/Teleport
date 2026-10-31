@@ -1,0 +1,11 @@
+{
+  "deviceId": "dev-offline-server",
+  "ts": 1700000000.0,
+  "cpuPct": 0.0,
+  "memPct": 0.0,
+  "memFreeMb": 0,
+  "diskFreeMb": 0,
+  "battery": null,
+  "online": false
+}
+

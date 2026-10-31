@@ -1,0 +1,9 @@
+{
+  "peerId": "dev-target-peer",
+  "link": "cable",
+  "rttMs": 1.2,
+  "mbps": 1000.0,
+  "lossPct": 0.0,
+  "ts": 1700000000.0
+}
+
