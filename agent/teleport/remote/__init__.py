@@ -110,16 +110,36 @@ class RemoteServiceImpl:
         )
         self._sessions[session_id] = session
 
+        # Check remote consent policy from ctx.prefs
+        policy = getattr(self.ctx.prefs, "remoteConsent", None)
+        if not policy:
+            try:
+                prefs_file = self.ctx.settings.home / "prefs.json"
+                if prefs_file.is_file():
+                    import json
+                    data = json.loads(prefs_file.read_text(encoding="utf-8"))
+                    policy = data.get("remoteConsent")
+            except Exception:
+                pass
+        policy = policy or "prompt"
+
+        if policy == "auto_allow":
+            session.set_consent(True)
+            log.info("Auto-allowing remote session %s per remoteConsent preference", session_id)
+        elif policy == "deny_all":
+            session.set_consent(False)
+            log.info("Auto-denying remote session %s per remoteConsent preference", session_id)
+        else:
+            log.info(
+                "Created remote session %s for workload %s (viewer: %s, pending consent)",
+                session_id,
+                workload_id,
+                viewer_id,
+            )
+
         contract_session = session.to_contract()
         # Publish remote.session event
         await self.ctx.bus.publish(RemoteSessionEvent(session=contract_session))
-
-        log.info(
-            "Created remote session %s for workload %s (viewer: %s, pending consent)",
-            session_id,
-            workload_id,
-            viewer_id,
-        )
         return contract_session
 
     async def consent(self, session_id: str, allow: bool) -> RemoteSession:

@@ -73,3 +73,36 @@ async def test_session_lifecycle_and_consent(tmp_path: Path) -> None:
     # 3. Stop session
     assert await service.stop_session(session.id) is True
     assert len(service.sessions()) == 0
+
+
+@pytest.mark.asyncio
+async def test_remote_consent_policy_auto_allow(tmp_path: Path) -> None:
+    ctx = build_context(Settings(home=tmp_path / "home"))
+    object.__setattr__(ctx.prefs, "remoteConsent", "auto_allow")
+    service = RemoteServiceImpl(ctx, capture_backend=FakeCaptureBackend())
+
+    session = await service.start_session(workload_id="w-ml", viewer_id="v-peer")
+    assert session.consent is True
+
+
+@pytest.mark.asyncio
+async def test_remote_consent_policy_deny_all(tmp_path: Path) -> None:
+    ctx = build_context(Settings(home=tmp_path / "home"))
+    object.__setattr__(ctx.prefs, "remoteConsent", "deny_all")
+    service = RemoteServiceImpl(ctx, capture_backend=FakeCaptureBackend())
+
+    session = await service.start_session(workload_id="w-ml", viewer_id="v-peer")
+    assert session.consent is False
+
+
+@pytest.mark.asyncio
+async def test_remote_consent_policy_prefs_json(tmp_path: Path) -> None:
+    import json
+    home = tmp_path / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "prefs.json").write_text(json.dumps({"remoteConsent": "auto_allow"}), encoding="utf-8")
+    ctx = build_context(Settings(home=home))
+    service = RemoteServiceImpl(ctx, capture_backend=FakeCaptureBackend())
+
+    session = await service.start_session(workload_id="w-ml", viewer_id="v-peer")
+    assert session.consent is True
