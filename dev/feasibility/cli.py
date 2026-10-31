@@ -13,10 +13,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent.teleport.feasibility.checks import run_all_checks
+from agent.teleport.feasibility.engine import evaluate_feasibility
 from contract.contract import (
-    Decision,
     DeviceInfo,
+    FeasibilityResult,
     LinkQuality,
     Reason,
     Stats,
@@ -38,7 +38,6 @@ def resolve_file_path(path_str: str) -> Path:
     fixture_candidate_json = FIXTURES_DIR / f"{path_str}.json"
     if fixture_candidate_json.exists():
         return fixture_candidate_json
-    # Return as-is for standard error reporting
     return p
 
 
@@ -66,58 +65,16 @@ CHECK_NAMES = [
 ]
 
 
-def determine_verdict(
-    manifest: WorkloadManifest, reasons: list[Reason], link: LinkQuality | None
-) -> tuple[Decision, str]:
-    """Determine the final feasibility verdict and explanation based on precedence rules."""
-    has_block = any(r.severity == "block" for r in reasons)
-    warnings = [r for r in reasons if r.severity == "warn"]
-
-    if not has_block:
-        if warnings:
-            return (
-                "MIGRATE",
-                f"Workload can be migrated with {len(warnings)} warning(s).",
-            )
-        return "MIGRATE", "All compatibility and resource checks passed successfully."
-
-    # Blocks exist: can we fall back to REMOTE_ACCESS?
-    remote_capable = getattr(manifest, "remoteCapable", False)
-    link_viable = (
-        link is not None
-        and getattr(link, "lossPct", 100.0) <= 5.0
-        and getattr(link, "mbps", 0.0) >= 2.0
-        and getattr(link, "rttMs", 999.0) <= 300.0
-    )
-
-    if remote_capable and link_viable:
-        return (
-            "REMOTE_ACCESS",
-            "Direct migration blocked; remote access fallback is viable (workload is remoteCapable and link supports streaming).",
-        )
-    if not remote_capable:
-        return (
-            "STAY",
-            "Migration blocked and workload is not remoteCapable; workload must STAY on source.",
-        )
-    return (
-        "STAY",
-        "Migration blocked and network link cannot support remote streaming; workload must STAY on source.",
-    )
-
-
 def format_table(
     manifest: WorkloadManifest,
     target: DeviceInfo,
-    reasons: list[Reason],
-    verdict: Decision,
-    verdict_explanation: str,
+    result: FeasibilityResult,
 ) -> str:
     """Build a formatted ASCII report table."""
     col_check_w = 18
     col_sev_w = 9
-    col_code_w = 18
-    col_reason_w = 70
+    col_code_w = 26
+    col_reason_w = 66
 
     sep_line = (
         "+"
@@ -147,14 +104,30 @@ def format_table(
         sep_line,
     ]
 
-    for name, reason in zip(CHECK_NAMES, reasons):
+    # Index 0 is the summary reason
+    summary_reason = result.reasons[0] if result.reasons else None
+    check_reasons = result.reasons[1:] if len(result.reasons) > 1 else result.reasons
+
+    # Print summary row at top
+    if summary_reason:
+        s_display = (
+            summary_reason.text[: col_reason_w - 3] + "..."
+            if len(summary_reason.text) > col_reason_w
+            else summary_reason.text
+        )
+        lines.append(
+            f"| {'[SUMMARY]':<{col_check_w}} "
+            f"| {summary_reason.severity.upper():<{col_sev_w}} "
+            f"| {summary_reason.code:<{col_code_w}} "
+            f"| {s_display:<{col_reason_w}} |"
+        )
+        lines.append(sep_line)
+
+    for idx, reason in enumerate(check_reasons):
+        name = CHECK_NAMES[idx] if idx < len(CHECK_NAMES) else reason.code.split(".")[0].title()
         sev_str = reason.severity.upper()
-        # Truncate or wrap reason text cleanly if overly long
         r_text = reason.text
-        if len(r_text) > col_reason_w:
-            r_display = r_text[: col_reason_w - 3] + "..."
-        else:
-            r_display = r_text
+        r_display = r_text[: col_reason_w - 3] + "..." if len(r_text) > col_reason_w else r_text
 
         line = (
             f"| {name:<{col_check_w}} "
@@ -166,16 +139,22 @@ def format_table(
 
     lines.append(sep_line)
 
-    # Summary counts
-    pass_cnt = sum(1 for r in reasons if r.severity == "pass")
-    warn_cnt = sum(1 for r in reasons if r.severity == "warn")
-    block_cnt = sum(1 for r in reasons if r.severity == "block")
+    # Summary counts (excluding summary reason at index 0)
+    pass_cnt = sum(1 for r in check_reasons if r.severity == "pass")
+    warn_cnt = sum(1 for r in check_reasons if r.severity == "warn")
+    block_cnt = sum(1 for r in check_reasons if r.severity == "block")
+
+    estimates_line = (
+        f"  Estimates: estTransferSec = {result.estTransferSec:.2f}s  |  "
+        f"estInterruptionMs = {result.estInterruptionMs:.1f}ms"
+    )
 
     lines.extend(
         [
             "",
-            f"  Summary:  PASS = {pass_cnt}   |   WARN = {warn_cnt}   |   BLOCK = {block_cnt}",
-            f"  Verdict:  [{verdict}] - {verdict_explanation}",
+            f"  Summary:   PASS = {pass_cnt}   |   WARN = {warn_cnt}   |   BLOCK = {block_cnt}",
+            estimates_line,
+            f"  Verdict:   [{result.decision}] - {summary_reason.text if summary_reason else ''}",
             "",
         ]
     )
@@ -219,6 +198,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Alias for --stats.",
     )
     parser.add_argument(
+        "--source-stats",
+        help="Optional path to source device Stats JSON file.",
+    )
+    parser.add_argument(
         "--snapshot-size-mb",
         type=float,
         default=0.0,
@@ -231,8 +214,8 @@ def main(argv: list[str] | None = None) -> int:
         manifest_raw = load_json_file(args.manifest)
         manifest = WorkloadManifest.model_validate(manifest_raw)
 
-        # Source is required by CLI interface
-        load_json_file(args.source)
+        source_raw = load_json_file(args.source)
+        source = DeviceInfo.model_validate(source_raw)
 
         target_raw = load_json_file(args.target)
         target = DeviceInfo.model_validate(target_raw)
@@ -242,14 +225,13 @@ def main(argv: list[str] | None = None) -> int:
             link_raw = load_json_file(args.link)
             link = LinkQuality.model_validate(link_raw)
 
-        # Look for stats: explicit argument, or try adjacent stats file
+        # Target stats auto-detection
         stats_path_arg = args.target_stats or args.stats
-        stats: Stats | None = None
+        target_stats: Stats | None = None
         if stats_path_arg:
             stats_raw = load_json_file(stats_path_arg)
-            stats = Stats.model_validate(stats_raw)
+            target_stats = Stats.model_validate(stats_raw)
         else:
-            # Auto-detect matching stats fixture if target file name matches device_*
             target_path = resolve_file_path(args.target)
             target_stem = target_path.stem
             if target_stem.startswith("device_"):
@@ -257,18 +239,25 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_stats_path = target_path.parent / candidate_stats_name
                 if candidate_stats_path.exists():
                     with candidate_stats_path.open("r", encoding="utf-8") as f:
-                        stats = Stats.model_validate(json.load(f))
+                        target_stats = Stats.model_validate(json.load(f))
 
-        reasons = run_all_checks(
+        # Source stats
+        source_stats: Stats | None = None
+        if args.source_stats:
+            source_stats_raw = load_json_file(args.source_stats)
+            source_stats = Stats.model_validate(source_stats_raw)
+
+        result = evaluate_feasibility(
             manifest=manifest,
+            source=source,
             target=target,
-            stats=stats,
             link=link,
+            target_stats=target_stats,
+            source_stats=source_stats,
             snapshot_size_mb=args.snapshot_size_mb,
         )
 
-        verdict, explanation = determine_verdict(manifest, reasons, link)
-        table_output = format_table(manifest, target, reasons, verdict, explanation)
+        table_output = format_table(manifest, target, result)
         print(table_output)
         return 0
 
@@ -279,4 +268,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
