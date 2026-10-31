@@ -31,6 +31,7 @@ class DeviceServiceImpl(DeviceService):
         self.registry = DeviceRegistry(ctx.settings.home)
         self.simulator = StatsSimulator()
         self._latest_stats: dict[str, Stats] = {}
+        self._cached_local_info: DeviceInfo | None = None
         self._task: asyncio.Task[None] | None = None
 
         # Eagerly evaluate and register local device info and initial stats
@@ -38,8 +39,11 @@ class DeviceServiceImpl(DeviceService):
         self.registry.upsert(local, last_seen=time.time())
         self._latest_stats[self.ctx.device_id] = self._sample_sync()
 
-    def local_info(self) -> DeviceInfo:
+    def local_info(self, force_refresh: bool = False) -> DeviceInfo:
         """Probe local device capabilities with simulation profile overrides applied if active."""
+        if self._cached_local_info is not None and not force_refresh:
+            return self._cached_local_info
+
         base_info = probe_local_device(self.ctx)
         info_dict = base_info.model_dump()
 
@@ -51,12 +55,11 @@ class DeviceServiceImpl(DeviceService):
         if self.ctx.settings.deviceName:
             info_dict["name"] = self.ctx.settings.deviceName
 
-        return DeviceInfo.model_validate(info_dict)
+        self._cached_local_info = DeviceInfo.model_validate(info_dict)
+        return self._cached_local_info
 
     def list_devices(self) -> list[DeviceInfo]:
-        """Return local device first, then every known peer."""
-        local = self.local_info()
-        self.registry.upsert(local, last_seen=time.time())
+        """Return local device first, then every known peer (in-memory lookup)."""
         return self.registry.list_devices(local_id=self.ctx.device_id)
 
     def latest_stats(self, device_id: str) -> Stats | None:

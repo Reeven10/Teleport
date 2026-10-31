@@ -57,9 +57,16 @@ def test_runtimes_and_libraries(ctx: Context) -> None:
 
 
 def test_network_addrs_with_link_guess() -> None:
-    addrs = get_network_addresses(8765)
+    # Bound to 0.0.0.0 -> discovers interfaces
+    addrs = get_network_addresses(8765, bind_host="0.0.0.0")
     assert len(addrs) > 0
     links = {a.link for a in addrs}
     for link in links:
         assert link in ("cable", "wifi", "loopback")
     assert "127.0.0.1:8765" in {a.addr for a in addrs}
+
+    # Bound to 127.0.0.1 -> only advertises loopback
+    loopback_only = get_network_addresses(8765, bind_host="127.0.0.1")
+    assert len(loopback_only) == 1
+    assert loopback_only[0].addr == "127.0.0.1:8765"
+    assert loopback_only[0].link == "loopback"

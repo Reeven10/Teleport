@@ -211,8 +211,12 @@ def guess_link_type(iface_name: str, ip_str: str) -> LinkType:
     return "cable"
 
 
-def get_network_addresses(port: int) -> list[DeviceAddr]:
-    """Enumerate network addresses and guess link type (cable, wifi, loopback)."""
+def get_network_addresses(port: int, bind_host: str = "127.0.0.1") -> list[DeviceAddr]:
+    """Enumerate network addresses according to bind_host, guessing link types."""
+    # If bound strictly to loopback, only advertise loopback address
+    if bind_host in ("127.0.0.1", "localhost", "::1"):
+        return [DeviceAddr(addr=f"127.0.0.1:{port}", link="loopback")]
+
     addrs: list[DeviceAddr] = []
     seen: set[str] = set()
 
@@ -227,6 +231,9 @@ def get_network_addresses(port: int) -> list[DeviceAddr]:
                 if a.family == socket.AF_INET:
                     ip = a.address
                     if ip == "0.0.0.0":
+                        continue
+                    # If bound to a specific non-wildcard IP, only advertise that IP or loopback
+                    if bind_host not in ("0.0.0.0", "::") and ip != bind_host and not ip.startswith("127."):
                         continue
                     link = guess_link_type(iface, ip)
                     formatted = f"{ip}:{port}"
@@ -249,6 +256,7 @@ def probe_local_device(ctx: Context) -> DeviceInfo:
     """Build local DeviceInfo with hardware, runtimes, libraries, and addresses."""
     port = ctx.settings.port
     home = ctx.settings.home
+    bind_host = getattr(ctx.settings, "host", "127.0.0.1")
 
     name = ctx.settings.deviceName or socket.gethostname()
     cores = psutil.cpu_count(logical=True) or os.cpu_count() or 1
@@ -266,8 +274,9 @@ def probe_local_device(ctx: Context) -> DeviceInfo:
         "diskFreeMb": free_disk_mb,
         "runtimes": get_runtimes(),
         "libs": get_installed_libraries(),
-        "addrs": [a.model_dump() for a in get_network_addresses(port)],
+        "addrs": [a.model_dump() for a in get_network_addresses(port, bind_host=bind_host)],
         "agentVersion": __version__,
         "simulated": None,
     }
     return DeviceInfo.model_validate(info)
+

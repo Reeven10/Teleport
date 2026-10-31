@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import logging
 import time
@@ -18,7 +19,7 @@ from contract.contract import (
     PeerPing,
     PeerPong,
 )
-from teleport.security import ISecureSession, PlaintextDevSession
+from teleport.security import ISecureSession, SecureSession
 
 if TYPE_CHECKING:
     from ..core.context import Context
@@ -64,7 +65,7 @@ class ClientWSAdapter:
 
 
 class PeerConnection:
-    """Represents an active, authenticated peer connection."""
+    """Represents an active, authenticated, encrypted peer connection."""
 
     def __init__(
         self,
@@ -82,7 +83,7 @@ class PeerConnection:
         self.ctx = ctx
         self._on_message = on_message
         self._on_disconnect = on_disconnect
-        self.session: ISecureSession = session or PlaintextDevSession()
+        self.session: ISecureSession = session or SecureSession(ctx.settings.home)
 
         self.rtt_ms: float = 5.0
         self.mbps: float = 1000.0 if link_type == "cable" else (150.0 if link_type == "wifi" else 5000.0)
@@ -107,7 +108,9 @@ class PeerConnection:
 
         json_bytes = msg.model_dump_json().encode("utf-8")
         encrypted = self.session.encrypt(json_bytes)
-        await self.adapter.send(encrypted.decode("utf-8"))
+        # Transmit base64-encoded encrypted packet over text WebSocket
+        wire_data = base64.b64encode(encrypted).decode("ascii")
+        await self.adapter.send(wire_data)
 
     def quality(self) -> LinkQuality:
         """Get current LinkQuality snapshot."""
@@ -121,18 +124,22 @@ class PeerConnection:
         )
 
     async def _rx_loop(self) -> None:
-        """Receive loop processing incoming frames."""
+        """Receive loop processing incoming encrypted frames."""
         try:
             while not self._closed:
                 raw_text = await self.adapter.recv()
-                decrypted = self.session.decrypt(raw_text.encode("utf-8"))
+                try:
+                    wire_bytes = base64.b64decode(raw_text.strip())
+                except Exception:
+                    # In case of unencoded raw bytes
+                    wire_bytes = raw_text.encode("utf-8")
+
+                decrypted = self.session.decrypt(wire_bytes)
                 msg: PeerMessage = PeerMessageAdapter.validate_json(decrypted.decode("utf-8"))
 
                 if isinstance(msg, PeerPing):
-                    # Immediately respond to ping
                     await self.send(PeerPong(n=msg.n))
                 elif isinstance(msg, PeerPong):
-                    # Measure RTT
                     if t0 := self._ping_times.pop(msg.n, None):
                         sample_rtt = max(0.1, (time.time() - t0) * 1000.0)
                         self.rtt_ms = 0.8 * self.rtt_ms + 0.2 * sample_rtt

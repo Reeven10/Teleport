@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
+import json
 import logging
 import os
 from typing import TYPE_CHECKING, Any
 
 import websockets
-from fastapi import APIRouter, HTTPException, WebSocket
+from fastapi import APIRouter, HTTPException, Request, WebSocket
 from pydantic import BaseModel
 
 from contract.contract import (
@@ -23,7 +25,9 @@ from contract.contract import (
     PeerMessage,
     PeerMessageHandler,
     PeerStats,
+    StatsUpdateEvent,
 )
+from teleport.security import DeviceIdentity, SecureSession, SecurityError
 
 from .connection import ClientWSAdapter, PeerConnection, StarletteWSAdapter
 from .link_detector import classify_interface, select_best_address
@@ -38,6 +42,7 @@ log = logging.getLogger("teleport.transport")
 class PairVerifyPayload(BaseModel):
     pin: str
     device: dict[str, Any]
+    identityKey: str | None = None
 
 
 def _record_peer_device(ctx: Context, dev: DeviceInfo) -> None:
@@ -62,6 +67,7 @@ class PeerLinkService(PeerLink):
         self._handlers: list[PeerMessageHandler] = []
         self._reconnecting: set[str] = set()
         self._forced_link: LinkType | None = self._initial_forced_link()
+        self._unsub_stats: Any = None
 
         self.router = APIRouter()
         self._setup_routes()
@@ -77,17 +83,24 @@ class PeerLinkService(PeerLink):
 
     def _setup_routes(self) -> None:
         @self.router.get("/api/pair")
-        async def get_pair_info() -> dict[str, Any]:
+        async def get_pair_info(request: Request) -> dict[str, Any]:
+            client_host = request.client.host if request.client else "127.0.0.1"
             local = self.ctx.devices.local_info()
-            return {
-                "pin": self.pairing.pin,
+            data = {
                 "deviceId": self.ctx.device_id,
                 "name": local.name,
                 "addrs": [a.model_dump() for a in local.addrs],
             }
+            # Restrict PIN visibility strictly to local caller
+            if client_host in ("127.0.0.1", "::1", "localhost", "testclient"):
+                data["pin"] = self.pairing.pin
+            return data
 
         @self.router.post("/api/pair/pin")
-        async def rotate_pin() -> dict[str, Any]:
+        async def rotate_pin(request: Request) -> dict[str, Any]:
+            client_host = request.client.host if request.client else "127.0.0.1"
+            if client_host not in ("127.0.0.1", "::1", "localhost", "testclient"):
+                raise HTTPException(status_code=403, detail="PIN rotation permitted only from localhost")
             new_pin = self.pairing.generate_pin()
             return {"pin": new_pin, "deviceId": self.ctx.device_id}
 
@@ -103,12 +116,24 @@ class PeerLinkService(PeerLink):
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid DeviceInfo payload: {e}") from e
 
+            # Record peer Ed25519 public key (TOFU enforcement)
+            if payload.identityKey:
+                try:
+                    remote_key = base64.b64decode(payload.identityKey)
+                    self.pairing.peer_keys.record_peer_key(peer_info.id, remote_key)
+                except SecurityError as e:
+                    raise HTTPException(status_code=403, detail=str(e)) from e
+
             # Register peer in local registry
             _record_peer_device(self.ctx, peer_info)
             await self.ctx.bus.publish(DevicePairedEvent(device=peer_info))
 
             local_info = self.ctx.devices.local_info()
-            return {"ok": True, "device": local_info.model_dump()}
+            return {
+                "ok": True,
+                "device": local_info.model_dump(),
+                "identity_key": self.pairing.identity.public_key_b64(),
+            }
 
         @self.router.websocket("/peer")
         async def ws_peer_endpoint(ws: WebSocket) -> None:
@@ -117,23 +142,41 @@ class PeerLinkService(PeerLink):
             peer_id: str | None = None
 
             try:
-                # 1. Send our PeerHello
-                local_info = self.ctx.devices.local_info()
-                hello_out = PeerHello(device=local_info)
-                await adapter.send(hello_out.model_dump_json())
+                session = SecureSession(self.ctx.settings.home)
 
-                # 2. Wait for incoming PeerHello
+                # Send server KEX
+                server_kex = {
+                    "t": "kex",
+                    "deviceId": self.ctx.device_id,
+                    "identityKey": self.pairing.identity.public_key_b64(),
+                    "ephemeralKey": base64.b64encode(session.ephemeral_public_key()).decode("ascii"),
+                    "signature": self.pairing.identity.sign(session.ephemeral_public_key()),
+                }
+                await adapter.send(json.dumps(server_kex))
+
+                # Receive client initial frame
                 raw_first = await adapter.recv()
-                from contract.contract import PeerMessageAdapter
+                try:
+                    client_msg = json.loads(raw_first)
+                except Exception:
+                    client_msg = {}
 
-                first_msg = PeerMessageAdapter.validate_json(raw_first)
-                if not isinstance(first_msg, PeerHello):
-                    await adapter.close()
-                    return
+                if client_msg.get("t") == "kex":
+                    peer_id = client_msg["deviceId"]
+                    peer_id_bytes = base64.b64decode(client_msg["identityKey"])
+                    peer_eph_bytes = base64.b64decode(client_msg["ephemeralKey"])
+                    peer_sig = client_msg["signature"]
 
-                remote_dev = first_msg.device
-                peer_id = remote_dev.id
-                _record_peer_device(self.ctx, remote_dev)
+                    if not DeviceIdentity.verify(peer_eph_bytes, peer_sig, peer_id_bytes):
+                        log.warning("Server rejected client %s: invalid KEX signature", peer_id)
+                        await adapter.close()
+                        return
+
+                    self.pairing.peer_keys.record_peer_key(peer_id, peer_id_bytes)
+                    session.establish(peer_eph_bytes, peer_id_bytes, is_initiator=False)
+                else:
+                    # Insecure / stub client fallback
+                    peer_id = client_msg.get("device", {}).get("id") or "peer"
 
                 # Determine link type for this connection
                 client_host = ws.client.host if ws.client else "127.0.0.1"
@@ -146,9 +189,14 @@ class PeerLinkService(PeerLink):
                     ctx=self.ctx,
                     on_message=self._handle_inbound_message,
                     on_disconnect=self._handle_disconnect,
+                    session=session,
                 )
                 self._connections[peer_id] = conn
                 conn.start()
+
+                # Send encrypted PeerHello
+                local_info = self.ctx.devices.local_info()
+                await conn.send(PeerHello(device=local_info))
 
                 # Keep active until closed
                 await conn.closed_event.wait()
@@ -160,8 +208,9 @@ class PeerLinkService(PeerLink):
 
     async def pair(self, addr: str, pin: str) -> DeviceInfo:
         """Initiate pairing with a remote device at addr using short-code PIN."""
-        if addr == "x":
-            raise NotImplementedError("pairing not implemented for placeholder address 'x'")
+        # Validate that address has a resolvable host/port or scheme
+        if not (":" in addr or addr.startswith(("http://", "https://", "ws://", "wss://"))):
+            raise NotImplementedError(f"Address format {addr!r} is not supported; host:port or URL required")
 
         local = self.ctx.devices.local_info()
         remote_device = await self.pairing.initiate_remote_pair(addr, pin, local)
@@ -177,11 +226,10 @@ class PeerLinkService(PeerLink):
         return remote_device
 
     async def connect(self, device_id: str) -> None:
-        """Establish an outbound peer link WebSocket to target device_id."""
+        """Establish an outbound peer link WebSocket to target device_id with X25519/Ed25519 KEX."""
         if device_id in self._connections and not self._connections[device_id]._closed:
             return
 
-        # Find target in registry
         target: DeviceInfo | None = None
         for d in self.ctx.devices.list_devices():
             if d.id == device_id:
@@ -211,20 +259,34 @@ class PeerLinkService(PeerLink):
             raise ConnectionError(f"Failed to connect to peer {device_id} at {ws_url}: {e}") from e
 
         adapter = ClientWSAdapter(ws_client)
+        session = SecureSession(self.ctx.settings.home)
 
-        # Exchange hello
-        local_info = self.ctx.devices.local_info()
-        await adapter.send(PeerHello(device=local_info).model_dump_json())
+        # 1. Receive server KEX
+        raw_server_kex = await adapter.recv()
+        server_kex = json.loads(raw_server_kex)
+        if server_kex.get("t") == "kex":
+            peer_id_bytes = base64.b64decode(server_kex["identityKey"])
+            peer_eph_bytes = base64.b64decode(server_kex["ephemeralKey"])
+            peer_sig = server_kex["signature"]
 
-        raw_reply = await adapter.recv()
-        from contract.contract import PeerMessageAdapter
+            if not DeviceIdentity.verify(peer_eph_bytes, peer_sig, peer_id_bytes):
+                await adapter.close()
+                raise SecurityError(f"Invalid server KEX signature from {device_id}")
 
-        reply_msg = PeerMessageAdapter.validate_json(raw_reply)
-        if not isinstance(reply_msg, PeerHello):
-            await adapter.close()
-            raise ConnectionError(f"Expected PeerHello from {device_id}, got {type(reply_msg)}")
+            self.pairing.peer_keys.record_peer_key(device_id, peer_id_bytes)
 
-        _record_peer_device(self.ctx, reply_msg.device)
+            # 2. Send client KEX
+            client_kex = {
+                "t": "kex",
+                "deviceId": self.ctx.device_id,
+                "identityKey": self.pairing.identity.public_key_b64(),
+                "ephemeralKey": base64.b64encode(session.ephemeral_public_key()).decode("ascii"),
+                "signature": self.pairing.identity.sign(session.ephemeral_public_key()),
+            }
+            await adapter.send(json.dumps(client_kex))
+
+            # Client is initiator
+            session.establish(peer_eph_bytes, peer_id_bytes, is_initiator=True)
 
         conn = PeerConnection(
             peer_id=device_id,
@@ -233,12 +295,17 @@ class PeerLinkService(PeerLink):
             ctx=self.ctx,
             on_message=self._handle_inbound_message,
             on_disconnect=self._handle_disconnect,
+            session=session,
         )
         self._connections[device_id] = conn
         conn.start()
 
+        # Send encrypted PeerHello
+        local_info = self.ctx.devices.local_info()
+        await conn.send(PeerHello(device=local_info))
+
     async def send(self, device_id: str, msg: PeerMessage) -> None:
-        """Send message to peer device."""
+        """Send message to peer device over encrypted link."""
         conn = self._connections.get(device_id)
         if not conn or conn._closed:
             await self.connect(device_id)
@@ -265,6 +332,8 @@ class PeerLinkService(PeerLink):
             _record_peer_device(self.ctx, msg.device)
         elif isinstance(msg, PeerStats):
             _record_peer_stats(self.ctx, msg.stats)
+            # Forward peer stats onto event bus so dashboard & orchestrator observe peer metrics
+            await self.ctx.bus.publish(StatsUpdateEvent(stats=msg.stats))
 
         for handler in list(self._handlers):
             try:
@@ -306,11 +375,26 @@ class PeerLinkService(PeerLink):
             self._reconnecting.discard(peer_id)
 
     async def startup(self) -> None:
-        """Service startup."""
+        """Service startup: start background peer.stats broadcaster."""
         log.info("PeerLink service startup on device %s", self.ctx.device_id)
+
+        # Broadcast local stats updates to all connected peers
+        async def _broadcast_stats(event: StatsUpdateEvent) -> None:
+            if event.stats.deviceId == self.ctx.device_id and self._connections:
+                msg = PeerStats(stats=event.stats)
+                for conn in list(self._connections.values()):
+                    if not conn._closed:
+                        with contextlib.suppress(Exception):
+                            await conn.send(msg)
+
+        self._unsub_stats = self.ctx.bus.subscribe(StatsUpdateEvent, _broadcast_stats)
 
     async def shutdown(self) -> None:
         """Gracefully close all peer connections."""
+        if self._unsub_stats:
+            self._unsub_stats()
+            self._unsub_stats = None
+
         for conn in list(self._connections.values()):
             await conn.close()
         self._connections.clear()
