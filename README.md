@@ -5,6 +5,7 @@ state (checkpoint by checkpoint, hash-validated, single active instance via epoc
 running and gives remote access. Every decision comes with reasons.
 
 - Workflow, ownership and rules: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md)
+- Two-laptop demo: [docs/RUNBOOK.md](docs/RUNBOOK.md); test status: [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md); open issues by owner: [docs/INTEGRATION_ISSUES.md](docs/INTEGRATION_ISSUES.md)
 - Contract (source of truth, changes via P1): [contract/contract.ts](contract/contract.ts), mirrored in
   [contract/contract.py](contract/contract.py)
 

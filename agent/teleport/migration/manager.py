@@ -252,7 +252,8 @@ class MigrationManager:
         self._hold: set[str] = set()  # workloads that must not be relaunched until resolved
         self._resume: set[str] = set()  # rolled back during recovery: start again
         self._linked: set[str] = set()
-        self._reported: set[tuple[str, str, int]] = set()
+        self._reported: set[tuple[str, str, int]] = set()  # (workload, stopped device, epoch)
+        self._recent_conflicts: list[AuthorityConflict] = []
         self._target_lock = asyncio.Lock()
         self._lease_lock = asyncio.Lock()
         self._unsubscribe: list[Callable[[], None]] = []
@@ -992,7 +993,9 @@ class MigrationManager:
 
     async def _sync_leases(self, only: str | None = None) -> None:
         peers = [only] if only else self.ctx.peer_directory.ids()
-        msg = AuthLeases(leases=self.ctx.authority.leases())
+        cutoff = time.time() - 60
+        self._recent_conflicts = [c for c in self._recent_conflicts if c.ts > cutoff]
+        msg = AuthLeases(leases=self.ctx.authority.leases(), conflicts=self._recent_conflicts or None)
         for peer in peers:
             if self.ctx.peers.link_quality(peer) is None:
                 continue
@@ -1010,6 +1013,8 @@ class MigrationManager:
         async with self._lease_lock:
             remote = {lease.workloadId: lease for lease in msg.leases}
             await self._resolve_waiting(peer, remote)
+            for conflict in msg.conflicts or []:  # the peer resolved one we may not have seen
+                await self._report_conflict(conflict)
             for wid, theirs in remote.items():
                 if wid in self._hold or self._active(wid) or self._target_active(wid):
                     continue
@@ -1069,10 +1074,6 @@ class MigrationManager:
             if verdict == "stop_local":  # the loser never has the higher epoch, so adopting is safe
                 await self._kill_local(wid)
                 await self.ctx.authority.adopt(theirs)
-            key = (wid, peer, max(mine.epoch, theirs.epoch))
-            if key in self._reported:
-                return
-            self._reported.add(key)
             conflict = AuthorityConflict(
                 workloadId=wid,
                 deviceId=me,
@@ -1087,8 +1088,18 @@ class MigrationManager:
                 ),
                 ts=time.time(),
             )
-            log.warning("split brain on %s: %s", wid, conflict.reason)
-            await self.ctx.bus.publish(AuthorityConflictEvent(conflict=conflict))
+            if await self._report_conflict(conflict):
+                self._recent_conflicts.append(conflict)
+
+    async def _report_conflict(self, conflict: AuthorityConflict) -> bool:
+        """Publish a conflict once per (workload, stopped device, epoch), whoever detected it."""
+        key = (conflict.workloadId, conflict.stopped, max(conflict.localEpoch, conflict.remoteEpoch))
+        if key in self._reported:
+            return False
+        self._reported.add(key)
+        log.warning("split brain on %s: %s", conflict.workloadId, conflict.reason)
+        await self.ctx.bus.publish(AuthorityConflictEvent(conflict=conflict))
+        return True
 
     # ------------------------------------------------------------------ peer messages
 

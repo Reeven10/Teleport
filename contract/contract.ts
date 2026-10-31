@@ -9,8 +9,8 @@ export type RunState = 'idle' | 'running' | 'paused' | 'stopped' | 'exited';
 export type Phase = 'IDLE' | 'CONNECTING' | 'EVALUATING' | 'TRANSFERRING' | 'VALIDATING' | 'FENCING' | 'STARTING_TARGET' | 'COMPLETED' | 'ROLLING_BACK' | 'ROLLED_BACK' | 'REMOTE_ACCESS' | 'FAILED';
 
 export interface DeviceInfo { id: string; name: string; os: OsName; arch: Arch; cpuCores: number; ramMb: number; gpu: string | null; diskFreeMb: number; runtimes: Record<string, string>; libs: string[]; addrs: { addr: string; link: LinkType }[]; agentVersion: string; simulated?: boolean }
-export interface Stats { deviceId: string; ts: number; cpuPct: number; memPct: number; memFreeMb: number; diskFreeMb: number; battery: { pct: number; charging: boolean } | null; online: boolean; simulated?: boolean }
-export interface LinkQuality { peerId: string; link: LinkType; rttMs: number; mbps: number; lossPct: number; ts: number }
+export interface Stats { deviceId: string; ts: number; cpuPct: number; memPct: number; memFreeMb: number; diskFreeMb: number; battery: { pct: number; charging: boolean } | null; online: boolean; simulated?: boolean; stale?: boolean }
+export interface LinkQuality { peerId: string; link: LinkType; rttMs: number; mbps: number; lossPct: number; ts: number; online?: boolean; simulated?: boolean }
 export interface CheckpointDef { id: string; name: string; paths: string[] }
 export interface WorkloadManifest { id: string; name: string; command: string; runtime: { name: string; minVersion: string }; arch: Arch[]; os: OsName[]; minRamMb: number; minCpuCores: number; minDiskMb: number; needsGpu: boolean; libs: string[]; checkpoints: CheckpointDef[]; remoteCapable: boolean }
 export interface CheckpointRecord { id: string; seq: number; sizeBytes: number; sha256: string; createdAt: number; sent?: boolean; validated?: boolean }
@@ -41,7 +41,7 @@ export type PeerMessage =
   | { t: 'mig.start'; migrationId: string; epoch: number }
   | { t: 'mig.started'; migrationId: string; ok: boolean; error?: string }
   | { t: 'mig.abort'; migrationId: string; reason: string }
-  | { t: 'auth.leases'; leases: Authority[] };
+  | { t: 'auth.leases'; leases: Authority[]; conflicts?: AuthorityConflict[] };
 
 // Event bus (inside one agent) and the /ws/events stream
 export type BusEvent =

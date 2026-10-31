@@ -17,7 +17,7 @@ from contract.contract import (
     SecureSession,
     StatsUpdateEvent,
 )
-from teleport.core import Context, Settings, build_context
+from teleport.core import Context, Settings, build_context, create_app
 from teleport.security import SecureSession as SecureSessionImpl
 
 
@@ -65,3 +65,34 @@ def test_rest_routes(client: TestClient, tmp_path: Path) -> None:
     assert res.status_code == 400 and "command: Field required" in res.json()["problems"]
     assert client.post("/api/workloads/start", json={"manifestPath": "nope/"}).status_code == 404
     assert client.get("/api/workloads").json() == []
+
+
+def test_dashboard_settings_persist_and_apply(tmp_path: Path) -> None:
+    settings = Settings(home=tmp_path / "home", uiDist=tmp_path / "no-ui")
+    payload = {
+        "mode": "auto",
+        "batteryLowPct": 25,
+        "cpuHighPct": 85,
+        "memHighPct": 80,
+        "predictionWindowSec": 120,
+        "preferredLink": "cable",
+        "checkpointChunkKb": 1024,  # the dashboard's name and default: clamped to the 512 KB limit
+        "remoteConsent": "deny_all",
+    }
+    app = create_app(settings)
+    with TestClient(app) as client:
+        saved = client.put("/api/settings", json=payload).json()
+        assert {k: saved[k] for k in ("predictionWindowSec", "preferredLink", "remoteConsent")} == {
+            "predictionWindowSec": 120,
+            "preferredLink": "cable",
+            "remoteConsent": "deny_all",
+        }
+        assert saved["chunkSizeKb"] == saved["checkpointChunkKb"] == 512
+        assert getattr(app.state.ctx.peers, "_forced_link", "cable") == "cable"  # applied to the link
+        assert client.put("/api/settings", json={"preferedLink": "wifi"}).status_code == 422  # typo
+        assert client.put("/api/settings", json={"remoteConsent": "always"}).status_code == 422
+
+    with TestClient(create_app(settings)) as client:  # survives a restart
+        again = client.get("/api/settings").json()
+        assert (again["mode"], again["preferredLink"], again["chunkSizeKb"]) == ("auto", "cable", 512)
+        assert client.put("/api/settings", json={"preferredLink": "auto"}).json()["preferredLink"] == "auto"

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from contract.contract import (
     DecisionLog,
@@ -23,7 +24,7 @@ from contract.contract import (
 
 from .. import __version__
 from .context import Context
-from .settings import Mode, Prefs
+from .settings import CHUNK_KB_MAX, CHUNK_KB_MIN, Mode, PreferredLink, Prefs, RemoteConsent
 
 
 class PairRequest(BaseModel):
@@ -61,6 +62,10 @@ class StatsOverrideRequest(BaseModel):
 
 
 class PrefsUpdate(BaseModel):
+    """Partial update; unknown fields are rejected so a typo is never silently dropped."""
+
+    model_config = ConfigDict(extra="forbid")
+
     mode: Mode | None = None
     batteryLowPct: float | None = None
     cpuHighPct: float | None = None
@@ -69,6 +74,16 @@ class PrefsUpdate(BaseModel):
     precopyIntervalS: float | None = None
     precopyTargetId: str | None = None
     leaseSyncS: float | None = None
+    predictionWindowSec: float | None = None
+    preferredLink: PreferredLink | None = None
+    remoteConsent: RemoteConsent | None = None
+    checkpointChunkKb: int | None = None  # deprecated alias of chunkSizeKb (dashboard), clamped
+
+    def changes(self) -> dict[str, Any]:
+        data = self.model_dump(exclude_none=True)
+        if (alias := data.pop("checkpointChunkKb", None)) is not None and "chunkSizeKb" not in data:
+            data["chunkSizeKb"] = min(max(int(alias), CHUNK_KB_MIN), CHUNK_KB_MAX)
+        return data
 
 
 def build_router(ctx: Context) -> APIRouter:
@@ -119,21 +134,24 @@ def build_router(ctx: Context) -> APIRouter:
     async def workload_start(req: WorkloadStartRequest) -> WorkloadManifest:
         return await ctx.workloads.launch(req.manifestPath)
 
+    def settings_view() -> dict[str, Any]:
+        # checkpointChunkKb mirrors chunkSizeKb until the dashboard uses the real name (P4).
+        return {**ctx.prefs.model_dump(), "checkpointChunkKb": ctx.prefs.chunkSizeKb}
+
     @r.get("/settings")
-    async def get_settings() -> Prefs:
-        return ctx.prefs
+    async def get_settings() -> dict[str, Any]:
+        return settings_view()
 
     @r.put("/settings")
-    async def put_settings(update: PrefsUpdate) -> Prefs:
+    async def put_settings(update: PrefsUpdate) -> dict[str, Any]:
         try:
-            ctx.prefs = Prefs.model_validate(
-                {**ctx.prefs.model_dump(), **update.model_dump(exclude_none=True)}
-            )
+            ctx.prefs = Prefs.model_validate({**ctx.prefs.model_dump(), **update.changes()})
         except ValidationError as e:
             problems = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors())
             raise HTTPException(422, problems) from None
         ctx.prefs.save(ctx.settings.home)
-        return ctx.prefs
+        apply_preferred_link(ctx)
+        return settings_view()
 
     @r.post("/pair")
     async def pair(req: PairRequest) -> DeviceInfo:
@@ -183,6 +201,15 @@ def build_router(ctx: Context) -> APIRouter:
         ctx.devices.set_override(req.deviceId, req.stats)
         return {"ok": True}
 
+    if getattr(ctx.history, "router", None) is None:  # a history module with its own routes owns them
+        add_history_routes(r, ctx)
+
+    return r
+
+
+def add_history_routes(r: APIRouter, ctx: Context) -> None:
+    """The contract's minimal /api/history routes, used when the history store brings none."""
+
     @r.get("/history/devices")
     async def history_devices() -> list[DeviceInfo]:
         return await ctx.history.list_devices()
@@ -195,4 +222,14 @@ def build_router(ctx: Context) -> APIRouter:
     async def history_decisions() -> list[DecisionLog]:
         return await ctx.history.list_decisions()
 
-    return r
+
+def apply_preferred_link(ctx: Context) -> None:
+    """Push prefs.preferredLink to the peer link. "auto" leaves the transport's own choice
+    (including TELEPORT_FORCE_LINK) alone."""
+    force: Any = getattr(ctx.peers, "set_forced_link", None)
+    if not callable(force):
+        return
+    if ctx.prefs.preferredLink != "auto":
+        force(ctx.prefs.preferredLink)
+    elif not os.environ.get("TELEPORT_FORCE_LINK"):
+        force(None)

@@ -13,32 +13,24 @@ import yaml
 
 import teleport.transport
 from tests.migration.e2e.conftest import AgentFactory
-from tests.migration.e2e.harness import COUNTER_JOB, Agent, EventStream, pair, wait_until
+from tests.migration.e2e.harness import (
+    COUNTER_JOB,
+    WID,
+    Agent,
+    EventStream,
+    last_count,
+    launch,
+    migrate,
+    pair,
+    wait_until,
+)
 
 pytestmark = pytest.mark.skipif(
     hasattr(teleport.transport, "StubPeerLink"),
     reason="needs the real P2/P3/P4 modules from main (this branch still has the P1 stubs)",
 )
 
-WID = "counter-job"
 USER_CHECKPOINTS = {"config", "counter", "history", "stats", "journal", "meta"}
-
-
-def last_count(agent: Agent, workload_id: str = WID) -> int:
-    run = agent.run(workload_id)
-    counts = [int(m[1]) for line in (run or {}).get("logTail", []) if (m := re.match(r"count=(\d+)", line))]
-    return counts[-1] if counts else -1
-
-
-def launch(agent: Agent, manifest_path: Path, workload_id: str = WID) -> None:
-    agent.post("/api/workloads/start", {"manifestPath": str(manifest_path)})
-    wait_until(lambda: last_count(agent, workload_id) >= 5, what=f"{workload_id} counting on {agent.name}")
-
-
-def migrate(a: Agent, b: Agent, workload_id: str = WID) -> str:
-    started = a.post("/api/migrations", {"workloadId": workload_id, "targetId": b.device_id})
-    migration_id: str = started["id"]
-    return migration_id
 
 
 # ---------------------------------------------------------------- scenario 1

@@ -105,6 +105,7 @@ class Stats(ContractModel):
     battery: Battery | None
     online: bool
     simulated: bool | None = None
+    stale: bool | None = None  # no fresh sample from this device for a while (last values kept)
 
 
 class LinkQuality(ContractModel):
@@ -114,6 +115,8 @@ class LinkQuality(ContractModel):
     mbps: float
     lossPct: float
     ts: float
+    online: bool | None = None  # False while the peer is unreachable
+    simulated: bool | None = None  # values come from fault injection or a simulator
 
 
 class CheckpointDef(ContractModel):
@@ -377,6 +380,7 @@ class MigAbort(ContractModel):
 class AuthLeases(ContractModel):
     t: Literal["auth.leases"] = "auth.leases"
     leases: list[Authority]
+    conflicts: list[AuthorityConflict] | None = None  # recently resolved, so both sides report them
 
 
 PeerMessage = Annotated[

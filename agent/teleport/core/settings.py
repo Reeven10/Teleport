@@ -11,6 +11,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 Mode = Literal["recommend", "auto"]
+PreferredLink = Literal["auto", "cable", "wifi"]
+RemoteConsent = Literal["prompt", "auto_allow", "deny_all"]
+CHUNK_KB_MIN, CHUNK_KB_MAX = 16, 512
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROFILES_DIR = Path(__file__).resolve().parent / "sim_profiles"
@@ -51,13 +54,19 @@ class Prefs(BaseModel):
     cpuHighPct: float = 90
     memHighPct: float = 90
     # Migration transfer. Chunks travel base64 in one peer frame, so keep them well under 1 MiB.
-    chunkSizeKb: int = Field(256, ge=16, le=512)
+    chunkSizeKb: int = Field(256, ge=CHUNK_KB_MIN, le=CHUNK_KB_MAX)
     # Pre-copy: every N seconds send changed checkpoints of running workloads ahead (0 = off) to
     # precopyTargetId, or to the first connected peer when it is empty.
     precopyIntervalS: float = Field(0, ge=0)
     precopyTargetId: str = ""
     # How often leases are exchanged with connected peers (split-brain guard).
     leaseSyncS: float = Field(5, ge=0.1, le=300)
+    # Battery trend window used by the predictor (P3 reads it).
+    predictionWindowSec: float = Field(60, ge=5, le=3600)
+    # Link the peer link prefers: "auto" picks cable, then wifi. Applied to the transport (core).
+    preferredLink: PreferredLink = "auto"
+    # Remote access consent policy on this host (P4's remote service reads it).
+    remoteConsent: RemoteConsent = "prompt"
 
     @classmethod
     def load(cls, home: Path) -> Prefs:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -19,6 +20,7 @@ from websockets.sync.client import ClientConnection, connect
 REPO = Path(__file__).resolve().parents[3]
 COUNTER_JOB = REPO / "tests" / "fixtures" / "counter_job"
 DEV_PIN = "424242"
+WID = "counter-job"
 TERMINAL = {"COMPLETED", "ROLLED_BACK", "REMOTE_ACCESS", "FAILED"}
 
 
@@ -137,3 +139,20 @@ class EventStream:
         if self._ws is not None:
             self._ws.close()
         self._thread.join(5)
+
+
+def last_count(agent: Agent, workload_id: str = WID) -> int:
+    run = agent.run(workload_id)
+    counts = [int(m[1]) for line in (run or {}).get("logTail", []) if (m := re.match(r"count=(\d+)", line))]
+    return counts[-1] if counts else -1
+
+
+def launch(agent: Agent, manifest_path: Path, workload_id: str = WID) -> None:
+    agent.post("/api/workloads/start", {"manifestPath": str(manifest_path)})
+    wait_until(lambda: last_count(agent, workload_id) >= 5, what=f"{workload_id} counting on {agent.name}")
+
+
+def migrate(a: Agent, b: Agent, workload_id: str = WID) -> str:
+    started = a.post("/api/migrations", {"workloadId": workload_id, "targetId": b.device_id})
+    migration_id: str = started["id"]
+    return migration_id
