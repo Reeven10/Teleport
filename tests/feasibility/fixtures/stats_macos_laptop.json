@@ -1,0 +1,14 @@
+{
+  "deviceId": "dev-mac-laptop",
+  "ts": 1700000000.0,
+  "cpuPct": 15.0,
+  "memPct": 52.0,
+  "memFreeMb": 15728,
+  "diskFreeMb": 420000,
+  "battery": {
+    "pct": 55.0,
+    "charging": false
+  },
+  "online": true
+}
+

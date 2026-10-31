@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teleport Dev Remote Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0b0f17;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #131b26;
+      border-bottom: 1px solid #1f2d3d;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 16px;
+      color: #6366f1;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    input, button {
+      background: #1c2738;
+      border: 1px solid #2d3c52;
+      color: #f1f5f9;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+    }
+    input:focus { border-color: #6366f1; }
+    button {
+      background: #4f46e5;
+      border-color: #6366f1;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: #4338ca; }
+    button.secondary { background: #223044; border-color: #33445c; }
+    button.secondary:hover { background: #2d3e58; }
+    button.danger { background: #e11d48; border-color: #f43f5e; }
+    button.danger:hover { background: #be123c; }
+
+    .status-bar {
+      background: #0f1622;
+      border-bottom: 1px solid #1a2433;
+      padding: 6px 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #94a3b8;
+    }
+    .metric { display: flex; align-items: center; gap: 6px; }
+    .metric-val { font-weight: bold; color: #38bdf8; }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+      background: #070a0f;
+    }
+    #viewport {
+      max-width: 100%;
+      max-height: calc(100vh - 120px);
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      background: #000;
+      cursor: crosshair;
+      outline: none;
+    }
+    #viewport:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+    }
+    .overlay-msg {
+      position: absolute;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #334155;
+      padding: 16px 24px;
+      border-radius: 12px;
+      font-size: 13px;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 3v18" stroke-dasharray="2 2"/>
+        <path d="M3 12h18"/>
+      </svg>
+      Teleport Dev Remote Viewer
+    </div>
+
+    <div class="controls">
+      <input id="agentUrl" type="text" value="" placeholder="Agent URL (e.g. http://127.0.0.1:8765)" style="width: 200px;">
+      <input id="workloadId" type="text" value="w1" placeholder="Workload ID" style="width: 90px;">
+      <input id="sessionId" type="text" placeholder="Session ID" style="width: 110px;">
+      <input id="token" type="text" placeholder="One-time Token" style="width: 140px;">
+      <button id="btnStart" title="Start session (creates pending session)">1. Start</button>
+      <button id="btnConsent" class="secondary" title="Approve consent on host">2. Consent</button>
+      <button id="btnConnect" title="Connect WebSocket viewer">3. Connect</button>
+      <button id="btnStop" class="danger">Stop</button>
+    </div>
+  </header>
+
+  <div class="status-bar">
+    <div class="metric">Status: <span id="valStatus" class="metric-val" style="color: #94a3b8;">DISCONNECTED</span></div>
+    <div class="metric">FPS: <span id="valFps" class="metric-val">0.0</span></div>
+    <div class="metric">Latency: <span id="valLatency" class="metric-val">0 ms</span></div>
+    <div class="metric">Resolution: <span id="valRes" class="metric-val">—</span></div>
+    <div class="metric">Seq: <span id="valSeq" class="metric-val">0</span></div>
+  </div>
+
+  <main>
+    <div id="overlay" class="overlay-msg">Click "1. Start" &rarr; "2. Consent" &rarr; "3. Connect" to stream.</div>
+    <canvas id="viewport" tabindex="0" width="1280" height="720"></canvas>
+  </main>
+
+  <script>
+    // State
+    const agentInput = document.getElementById('agentUrl');
+    const workloadInput = document.getElementById('workloadId');
+    const sessionInput = document.getElementById('sessionId');
+    const tokenInput = document.getElementById('token');
+    const overlay = document.getElementById('overlay');
+    const canvas = document.getElementById('viewport');
+    const ctx = canvas.getContext('2d');
+
+    const valStatus = document.getElementById('valStatus');
+    const valFps = document.getElementById('valFps');
+    const valLatency = document.getElementById('valLatency');
+    const valRes = document.getElementById('valRes');
+    const valSeq = document.getElementById('valSeq');
+
+    let ws = null;
+    let frameCount = 0;
+    let lastFpsCalc = performance.now();
+
+    // Default agent address to current origin if served from agent
+    if (!agentInput.value) {
+      agentInput.value = window.location.origin.includes('5173') ? 'http://127.0.0.1:8765' : window.location.origin;
+    }
+
+    function logStatus(msg, color = '#38bdf8') {
+      valStatus.textContent = msg;
+      valStatus.style.color = color;
+    }
+
+    // 1. Start Session
+    document.getElementById('btnStart').addEventListener('click', async () => {
+      try {
+        logStatus('Starting session...', '#f59e0b');
+        const res = await fetch(`${agentInput.value}/api/remote/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workloadId: workloadInput.value, viewerId: 'dev-viewer' })
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const data = await res.json();
+        sessionInput.value = data.id;
+
+        // Fetch one-time token for convenience
+        const tokRes = await fetch(`${agentInput.value}/api/remote/token/${data.id}`);
+        if (tokRes.ok) {
+          const tokData = await tokRes.json();
+          tokenInput.value = tokData.token;
+        }
+        logStatus('Session created (Pending Consent)', '#f59e0b');
+      } catch (err) {
+        logStatus(`Start failed: ${err.message}`, '#f43f5e');
+      }
+    });
+
+    // 2. Approve Consent
+    document.getElementById('btnConsent').addEventListener('click', async () => {
+      try {
+        const sid = sessionInput.value;
+        if (!sid) return alert('Session ID required');
+        const res = await fetch(`${agentInput.value}/api/remote/consent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sid, allow: true })
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        logStatus('Consent granted!', '#10b981');
+      } catch (err) {
+        logStatus(`Consent failed: ${err.message}`, '#f43f5e');
+      }
+    });
+
+    // 3. Connect Stream
+    document.getElementById('btnConnect').addEventListener('click', () => {
+      const sid = sessionInput.value;
+      if (!sid) return alert('Session ID required');
+      if (ws) ws.close();
+
+      const base = agentInput.value.replace(/^http/, 'ws');
+      const token = tokenInput.value;
+      const wsUrl = `${base}/ws/remote/${sid}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+      logStatus('Connecting WS...', '#38bdf8');
+      ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        logStatus('STREAMING', '#10b981');
+        overlay.style.display = 'none';
+        canvas.focus();
+      };
+
+      ws.onmessage = async (event) => {
+        if (!(event.data instanceof ArrayBuffer)) return;
+        const buf = event.data;
+        if (buf.byteLength < 20) return;
+
+        // Header: width(uint32), height(uint32), seq(uint32), timestamp(double)
+        const view = new DataView(buf);
+        const w = view.getUint32(0);
+        const h = view.getUint32(4);
+        const seq = view.getUint32(8);
+        const ts = view.getFloat64(12);
+
+        // Latency
+        const nowSec = Date.now() / 1000;
+        const latencyMs = Math.max(1, Math.round((nowSec - ts) * 1000));
+        valLatency.textContent = `${latencyMs} ms`;
+        valSeq.textContent = seq;
+        valRes.textContent = `${w} x ${h}`;
+
+        // FPS calculation
+        frameCount++;
+        const now = performance.now();
+        if (now - lastFpsCalc >= 1000) {
+          const fps = ((frameCount * 1000) / (now - lastFpsCalc)).toFixed(1);
+          valFps.textContent = fps;
+          frameCount = 0;
+          lastFpsCalc = now;
+        }
+
+        // Render JPEG payload
+        const jpegBytes = buf.slice(20);
+        const blob = new Blob([jpegBytes], { type: 'image/jpeg' });
+        const imgBitmap = await createImageBitmap(blob);
+
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+        ctx.drawImage(imgBitmap, 0, 0);
+        imgBitmap.close();
+      };
+
+      ws.onerror = (e) => {
+        logStatus('Connection error', '#f43f5e');
+      };
+
+      ws.onclose = (e) => {
+        logStatus(`Closed (${e.code}: ${e.reason || 'disconnected'})`, '#94a3b8');
+        overlay.style.display = 'block';
+        overlay.textContent = `Stream closed (${e.code}: ${e.reason || 'disconnected'})`;
+      };
+    });
+
+    // Stop Session
+    document.getElementById('btnStop').addEventListener('click', async () => {
+      if (ws) ws.close();
+      const sid = sessionInput.value;
+      if (sid) {
+        await fetch(`${agentInput.value}/api/remote/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sid })
+        }).catch(() => {});
+      }
+      logStatus('STOPPED', '#94a3b8');
+    });
+
+    // Input Handling
+    function sendInput(obj) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(obj));
+      }
+    }
+
+    function getNormalizedCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const normX = (e.clientX - rect.left) / rect.width;
+      const normY = (e.clientY - rect.top) / rect.height;
+      return {
+        x: Math.max(0, Math.min(1, normX)),
+        y: Math.max(0, Math.min(1, normY))
+      };
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const coords = getNormalizedCoords(e);
+      sendInput({ type: 'mouse_move', x: coords.x, y: coords.y });
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      canvas.focus();
+      const coords = getNormalizedCoords(e);
+      const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+      sendInput({ type: 'mouse_down', button: btn, x: coords.x, y: coords.y });
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      e.preventDefault();
+      const coords = getNormalizedCoords(e);
+      const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+      sendInput({ type: 'mouse_up', button: btn, x: coords.x, y: coords.y });
+    });
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      sendInput({ type: 'wheel', dx: e.deltaX, dy: e.deltaY });
+    });
+
+    canvas.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      sendInput({ type: 'key_down', key: e.key, code: e.code });
+    });
+
+    canvas.addEventListener('keyup', (e) => {
+      e.preventDefault();
+      sendInput({ type: 'key_up', key: e.key, code: e.code });
+    });
+  </script>
+</body>
+</html>
+

@@ -1,37 +1,37 @@
-// Placeholder dashboard (P4 replaces it): agent health plus the live event stream.
-import { useEffect, useState } from 'react';
-import type { BusEvent, Stats } from '@contract';
-import { connectEvents, getJson } from './api.ts';
-
-interface Health { ok: boolean; deviceId: string; name: string; port: number; simProfile: string | null }
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { Sidebar } from './components/layout/Sidebar.tsx';
+import { TopBar } from './components/layout/TopBar.tsx';
+import { DashboardPage } from './pages/DashboardPage.tsx';
+import { HistoryPage } from './pages/HistoryPage.tsx';
+import { MigrationPage } from './pages/MigrationPage.tsx';
+import { RemotePage } from './pages/RemotePage.tsx';
+import { SettingsPage } from './pages/SettingsPage.tsx';
+import { WorkloadsPage } from './pages/WorkloadsPage.tsx';
+import { TeleportProvider } from './store/TeleportContext.tsx';
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [events, setEvents] = useState(0);
-
-  useEffect(() => {
-    getJson<Health>('/api/health').then(setHealth).catch(() => setHealth(null));
-    return connectEvents((e: BusEvent) => {
-      setEvents((n) => n + 1);
-      if (e.t === 'stats.update') setStats(e.stats);
-    });
-  }, []);
-
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
-      <h1 className="text-3xl font-bold">Teleport</h1>
-      <p className="mt-2 text-slate-400">
-        {health ? `${health.name} (${health.deviceId}) on :${health.port}` : 'agent not reachable'}
-      </p>
-      {stats && (
-        <p className="mt-4">
-          CPU {stats.cpuPct.toFixed(0)}% · RAM {stats.memPct.toFixed(0)}%
-          {stats.battery ? ` · Battery ${stats.battery.pct.toFixed(0)}%` : ''}
-          {stats.simulated && <span className="ml-2 rounded bg-amber-500 px-2 text-black">SIMULATED</span>}
-        </p>
-      )}
-      <p className="mt-2 text-sm text-slate-500">{events} events received</p>
-    </main>
+    <BrowserRouter>
+      <TeleportProvider>
+        <div className="flex min-h-screen flex-col bg-slate-100 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
+          <TopBar />
+          <div className="flex flex-1">
+            <Sidebar />
+            <main className="flex-1 overflow-y-auto p-6 md:p-8">
+              <div className="mx-auto max-w-7xl">
+                <Routes>
+                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/workloads" element={<WorkloadsPage />} />
+                  <Route path="/migration" element={<MigrationPage />} />
+                  <Route path="/remote" element={<RemotePage />} />
+                  <Route path="/history" element={<HistoryPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                </Routes>
+              </div>
+            </main>
+          </div>
+        </div>
+      </TeleportProvider>
+    </BrowserRouter>
   );
 }

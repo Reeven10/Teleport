@@ -1,0 +1,19 @@
+{
+  "id": "dev-offline-server",
+  "name": "Rack-Server-Sleeping",
+  "os": "linux",
+  "arch": "x86_64",
+  "cpuCores": 16,
+  "ramMb": 32768,
+  "gpu": null,
+  "diskFreeMb": 400000,
+  "runtimes": {
+    "python": "3.11.6"
+  },
+  "libs": ["numpy", "requests"],
+  "addrs": [
+    {"addr": "192.168.1.200:8765", "link": "cable"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

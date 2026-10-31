@@ -1,0 +1,14 @@
+{
+  "deviceId": "dev-win-laptop",
+  "ts": 1700000000.0,
+  "cpuPct": 22.5,
+  "memPct": 45.0,
+  "memFreeMb": 8192,
+  "diskFreeMb": 240000,
+  "battery": {
+    "pct": 85.0,
+    "charging": true
+  },
+  "online": true
+}
+

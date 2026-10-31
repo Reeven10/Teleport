@@ -1,0 +1,19 @@
+{
+  "id": "dev-source-main",
+  "name": "Local-Dev-Laptop",
+  "os": "linux",
+  "arch": "x86_64",
+  "cpuCores": 8,
+  "ramMb": 16384,
+  "gpu": null,
+  "diskFreeMb": 120000,
+  "runtimes": {
+    "python": "3.11.9"
+  },
+  "libs": ["numpy", "requests", "torch"],
+  "addrs": [
+    {"addr": "127.0.0.1:8765", "link": "loopback"}
+  ],
+  "agentVersion": "0.1.0"
+}
+

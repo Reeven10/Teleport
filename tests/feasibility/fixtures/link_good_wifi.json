@@ -1,0 +1,9 @@
+{
+  "peerId": "dev-target-peer",
+  "link": "wifi",
+  "rttMs": 18.5,
+  "mbps": 120.0,
+  "lossPct": 0.1,
+  "ts": 1700000000.0
+}
+

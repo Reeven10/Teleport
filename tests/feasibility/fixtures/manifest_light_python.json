@@ -1,0 +1,25 @@
+{
+  "id": "w-light-py",
+  "name": "Light Python Task",
+  "command": "python worker.py --interval 1s",
+  "runtime": {
+    "name": "python",
+    "minVersion": "3.11"
+  },
+  "arch": ["x86_64", "arm64"],
+  "os": ["windows", "linux", "macos"],
+  "minRamMb": 512,
+  "minCpuCores": 1,
+  "minDiskMb": 100,
+  "needsGpu": false,
+  "libs": ["requests"],
+  "checkpoints": [
+    {
+      "id": "c1",
+      "name": "state",
+      "paths": ["state.json"]
+    }
+  ],
+  "remoteCapable": true
+}
+
