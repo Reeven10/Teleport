@@ -1,18 +1,19 @@
 """Feasibility engine (P3).
 
-Provides individual checks and evaluate() for workload migration feasibility.
+Provides individual checks, feasibility evaluation, and target selection.
+Satisfies the FeasibilityEngine Protocol and publishes decision.logged events.
 """
 
 from __future__ import annotations
 
-import time
+import uuid
 
 from contract.contract import (
-    Decision,
+    DecisionLog,
+    DecisionLoggedEvent,
     DeviceInfo,
     FeasibilityResult,
     LinkQuality,
-    Reason,
     WorkloadManifest,
 )
 
@@ -33,6 +34,11 @@ from .checks import (
     format_mb,
     run_all_checks,
 )
+from .engine import (
+    best_target,
+    calculate_estimates,
+    evaluate_feasibility,
+)
 
 __all__ = [
     "check_architecture",
@@ -49,13 +55,16 @@ __all__ = [
     "run_all_checks",
     "format_mb",
     "compare_versions",
+    "calculate_estimates",
+    "evaluate_feasibility",
+    "best_target",
     "FeasibilityEngineImpl",
     "create_feasibility_engine",
 ]
 
 
 class FeasibilityEngineImpl:
-    """Feasibility engine implementation evaluating migration suitability."""
+    """Full implementation of FeasibilityEngine evaluating workload migration feasibility."""
 
     def __init__(self, ctx: Context) -> None:
         self.ctx = ctx
@@ -67,58 +76,41 @@ class FeasibilityEngineImpl:
         target: DeviceInfo,
         link: LinkQuality | None,
     ) -> FeasibilityResult:
-        # Fetch target stats from device service if available
-        stats = None
+        # Fetch target and source stats if available from devices service
+        target_stats = None
+        source_stats = None
         try:
-            stats = self.ctx.devices.latest_stats(target.id)
+            target_stats = self.ctx.devices.latest_stats(target.id)
+        except Exception:
+            pass
+        try:
+            source_stats = self.ctx.devices.latest_stats(source.id)
         except Exception:
             pass
 
-        # Calculate snapshot size if checkpoints are provided
-        snapshot_size_mb = 0.0
-        if hasattr(manifest, "checkpoints") and manifest.checkpoints:
-            # Estimate baseline snapshot size
-            snapshot_size_mb = 10.0
-
-        reasons = run_all_checks(
+        # Compute feasibility result using engine
+        result = evaluate_feasibility(
             manifest=manifest,
+            source=source,
             target=target,
-            stats=stats,
             link=link,
-            snapshot_size_mb=snapshot_size_mb,
+            target_stats=target_stats,
+            source_stats=source_stats,
         )
 
-        has_block = any(r.severity == "block" for r in reasons)
-        decision: Decision
-
-        if not has_block:
-            decision = "MIGRATE"
-        else:
-            # Check if remote access is possible
-            # Workload must be remoteCapable and link must not have high loss or be dead
-            link_ok_for_remote = (
-                link is not None
-                and link.lossPct <= 5.0
-                and link.mbps >= 2.0
-                and link.rttMs <= 300.0
-            )
-            is_remote_capable = getattr(manifest, "remoteCapable", False)
-
-            if is_remote_capable and link_ok_for_remote:
-                decision = "REMOTE_ACCESS"
-            else:
-                decision = "STAY"
-
-        return FeasibilityResult(
+        # Publish decision.logged event to event bus so history store can record it
+        log = DecisionLog(
+            id=f"dec-{uuid.uuid4().hex[:12]}",
+            ts=result.ts,
             workloadId=manifest.id,
-            sourceId=source.id,
-            targetId=target.id,
-            decision=decision,
-            reasons=reasons,
-            estTransferSec=2.5 if decision == "MIGRATE" else 0.0,
-            estInterruptionMs=350.0 if decision == "MIGRATE" else 0.0,
-            ts=time.time(),
+            trigger="user_command",
+            decision=result.decision,
+            reasons=result.reasons,
         )
+        if hasattr(self.ctx, "bus"):
+            await self.ctx.bus.publish(DecisionLoggedEvent(log=log))
+
+        return result
 
     async def startup(self) -> None:
         pass
