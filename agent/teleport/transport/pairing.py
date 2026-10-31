@@ -15,6 +15,7 @@ import httpx
 from fastapi import HTTPException
 
 from contract.contract import DeviceInfo
+from teleport.security.identity import DeviceIdentity, PeerKeyStore
 
 if TYPE_CHECKING:
     from ..core.context import Context
@@ -27,6 +28,8 @@ class PairingManager:
 
     def __init__(self, ctx: Context) -> None:
         self.ctx = ctx
+        self.identity = DeviceIdentity(ctx.settings.home)
+        self.peer_keys = PeerKeyStore(ctx.settings.home)
         self._pin: str = self._initial_pin()
         self._failed_attempts: int = 0
         self._lockout_until: float = 0.0
@@ -101,6 +104,7 @@ class PairingManager:
         payload = {
             "pin": pin.strip(),
             "device": local_device.model_dump(),
+            "identity_key": self.identity.public_key_b64(),
         }
 
         try:
@@ -126,5 +130,12 @@ class PairingManager:
         peer_data = data.get("device")
         if not peer_data:
             raise HTTPException(status_code=502, detail="Peer returned success without DeviceInfo")
+
+        # Record peer Ed25519 identity key
+        if remote_key_b64 := data.get("identity_key"):
+            import base64
+
+            remote_key_bytes = base64.b64decode(remote_key_b64)
+            self.peer_keys.record_peer_key(peer_data["id"], remote_key_bytes)
 
         return DeviceInfo.model_validate(peer_data)

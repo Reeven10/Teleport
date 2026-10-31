@@ -23,6 +23,12 @@ if TYPE_CHECKING:
 log = logging.getLogger("teleport.devices")
 
 
+class ExtendedStats(Stats):
+    """Extended Stats with explicit staleness indicator."""
+
+    stale: bool = False
+
+
 class DeviceServiceImpl(DeviceService):
     """Production DeviceService satisfying contract/contract.py Protocol."""
 
@@ -31,6 +37,7 @@ class DeviceServiceImpl(DeviceService):
         self.registry = DeviceRegistry(ctx.settings.home)
         self.simulator = StatsSimulator()
         self._latest_stats: dict[str, Stats] = {}
+        self._cached_local_info: DeviceInfo | None = None
         self._task: asyncio.Task[None] | None = None
 
         # Eagerly evaluate and register local device info and initial stats
@@ -38,8 +45,11 @@ class DeviceServiceImpl(DeviceService):
         self.registry.upsert(local, last_seen=time.time())
         self._latest_stats[self.ctx.device_id] = self._sample_sync()
 
-    def local_info(self) -> DeviceInfo:
+    def local_info(self, force_refresh: bool = False) -> DeviceInfo:
         """Probe local device capabilities with simulation profile overrides applied if active."""
+        if self._cached_local_info is not None and not force_refresh:
+            return self._cached_local_info
+
         base_info = probe_local_device(self.ctx)
         info_dict = base_info.model_dump()
 
@@ -51,17 +61,27 @@ class DeviceServiceImpl(DeviceService):
         if self.ctx.settings.deviceName:
             info_dict["name"] = self.ctx.settings.deviceName
 
-        return DeviceInfo.model_validate(info_dict)
+        self._cached_local_info = DeviceInfo.model_validate(info_dict)
+        return self._cached_local_info
 
     def list_devices(self) -> list[DeviceInfo]:
-        """Return local device first, then every known peer."""
-        local = self.local_info()
-        self.registry.upsert(local, last_seen=time.time())
+        """Return local device first, then every known peer (in-memory lookup)."""
         return self.registry.list_devices(local_id=self.ctx.device_id)
 
     def latest_stats(self, device_id: str) -> Stats | None:
-        """Latest stats reported for device_id (local or peer)."""
-        return self._latest_stats.get(device_id)
+        """Latest stats reported for device_id (local or peer). Marked stale if > 5.0 seconds old."""
+        stats = self._latest_stats.get(device_id)
+        if not stats:
+            return None
+        now = time.time()
+        is_stale = (now - stats.ts) > 5.0
+        dump = stats.model_dump()
+        if is_stale:
+            dump["online"] = False
+            dump["stale"] = True
+            return ExtendedStats(**dump)
+        dump["stale"] = False
+        return ExtendedStats(**dump)
 
     def set_override(self, device_id: str, partial_stats: dict[str, Any] | None) -> None:
         """Dev simulator: merge partial Stats fields over real ones; None clears."""

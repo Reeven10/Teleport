@@ -13,6 +13,7 @@ from contract.contract import (
     DevicePairedEvent,
     LinkQuality,
     LinkType,
+    LinkUpdateEvent,
     PeerHello,
     PeerLink,
     PeerMessage,
@@ -21,6 +22,7 @@ from contract.contract import (
     PeerPong,
     PeerStats,
 )
+from teleport.transport.quality import ExtendedLinkQuality
 
 if TYPE_CHECKING:
     from teleport.core import Context
@@ -61,16 +63,28 @@ class InMemoryPeerLink(PeerLink):
         """Cut the communication channel."""
         self.is_cut = True
         self._connected = False
-        asyncio.create_task(
-            self.ctx.bus.publish(
-                DeviceLostEvent(deviceId=self.counterpart.ctx.device_id if self.counterpart else "unknown")
-            )
+        peer_id = self.counterpart.ctx.device_id if self.counterpart else "unknown"
+        asyncio.create_task(self.ctx.bus.publish(DeviceLostEvent(deviceId=peer_id)))
+        dead_link = ExtendedLinkQuality(
+            peerId=peer_id,
+            link=self.link_type,
+            rttMs=999.0,
+            mbps=0.0,
+            lossPct=100.0,
+            ts=time.time(),
+            online=False,
+            simulated=True if (self.delay_ms > 0 or self.drop_rate > 0) else None,
         )
+        asyncio.create_task(self.ctx.bus.publish(LinkUpdateEvent(link=dead_link)))
 
     def restore(self) -> None:
         """Restore cut communication channel."""
         self.is_cut = False
         self._connected = True
+        if self.counterpart:
+            peer_id = self.counterpart.ctx.device_id
+            if quality := self.link_quality(peer_id):
+                asyncio.create_task(self.ctx.bus.publish(LinkUpdateEvent(link=quality)))
 
     async def pair(self, addr: str, pin: str) -> DeviceInfo:
         if not self.counterpart:
@@ -151,13 +165,16 @@ class InMemoryPeerLink(PeerLink):
     def link_quality(self, device_id: str) -> LinkQuality | None:
         if not self.counterpart or self.counterpart.ctx.device_id != device_id or self.is_cut:
             return None
-        return LinkQuality(
+        is_sim = True if (self.delay_ms > 0 or self.drop_rate > 0) else None
+        return ExtendedLinkQuality(
             peerId=device_id,
             link=self.link_type,
             rttMs=max(1.0, self.delay_ms * 2),
             mbps=1000.0 if self.link_type == "cable" else 150.0,
             lossPct=self.drop_rate * 100.0,
             ts=time.time(),
+            online=True,
+            simulated=is_sim,
         )
 
     def list_peers(self) -> list[DeviceInfo]:

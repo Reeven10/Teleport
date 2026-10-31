@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -17,6 +19,7 @@ from contract.contract import (
     PeerStats,
 )
 from teleport.core import Settings, build_context, create_app
+from teleport.security import DeviceIdentity, SecureSession
 from teleport.transport.service import PeerLinkService
 
 from .in_memory_peer_link import create_in_memory_peer_links
@@ -28,22 +31,52 @@ def test_websocket_peer_endpoint_hello_and_ping(tmp_path: Path) -> None:
 
     with TestClient(app) as client:
         with client.websocket_connect("/peer") as ws:
-            # 1. Server sends its PeerHello first
-            msg1 = PeerMessageAdapter.validate_json(ws.receive_text())
+            # 1. Server sends KEX
+            raw_srv = ws.receive_text()
+            srv_kex = json.loads(raw_srv)
+            assert srv_kex.get("t") == "kex"
+            server_id_bytes = base64.b64decode(srv_kex["identityKey"])
+            server_eph_bytes = base64.b64decode(srv_kex["ephemeralKey"])
+            server_sig = srv_kex["signature"]
+
+            assert DeviceIdentity.verify(server_eph_bytes, server_sig, server_id_bytes)
+
+            # 2. Client sends KEX and establishes session
+            client_session = SecureSession(tmp_path / "client")
+            client_kex = {
+                "t": "kex",
+                "deviceId": "dev-client",
+                "identityKey": client_session.identity.public_key_b64(),
+                "ephemeralKey": base64.b64encode(client_session.ephemeral_public_key()).decode("ascii"),
+                "signature": client_session.sign(client_session.ephemeral_public_key()),
+            }
+            ws.send_text(json.dumps(client_kex))
+            client_session.establish(server_eph_bytes, server_id_bytes, is_initiator=True)
+
+            # 3. Server sends encrypted PeerHello
+            raw_b64 = ws.receive_text()
+            decrypted = client_session.decrypt(base64.b64decode(raw_b64))
+            msg1 = PeerMessageAdapter.validate_json(decrypted)
             assert isinstance(msg1, PeerHello)
             assert msg1.device.name == "Server Node"
 
-            # 2. Client replies with its PeerHello
+            # 4. Client replies with encrypted PeerHello
             client_hello = PeerHello(
                 device=msg1.device.model_copy(update={"id": "dev-client", "name": "Client Node"})
             )
-            ws.send_text(client_hello.model_dump_json())
+            hello_bytes = client_hello.model_dump_json().encode("utf-8")
+            enc_hello = base64.b64encode(client_session.encrypt(hello_bytes)).decode("ascii")
+            ws.send_text(enc_hello)
 
-            # 3. Client sends PeerPing
-            ws.send_text(PeerPing(n=42).model_dump_json())
+            # 5. Client sends encrypted PeerPing
+            ping_bytes = PeerPing(n=42).model_dump_json().encode("utf-8")
+            enc_ping = base64.b64encode(client_session.encrypt(ping_bytes)).decode("ascii")
+            ws.send_text(enc_ping)
 
-            # 4. Server responds with PeerPong
-            reply = PeerMessageAdapter.validate_json(ws.receive_text())
+            # 6. Server responds with encrypted PeerPong
+            raw_pong = ws.receive_text()
+            decrypted_pong = client_session.decrypt(base64.b64decode(raw_pong))
+            reply = PeerMessageAdapter.validate_json(decrypted_pong)
             assert isinstance(reply, PeerPong)
             assert reply.n == 42
 
