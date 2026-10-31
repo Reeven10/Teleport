@@ -97,8 +97,8 @@ async def test_target_start_failure_rolls_back_and_source_resumes(make_pair: Pai
     p.a.host.tick(p.wid)  # the source is live again
     lease = p.a.ctx.authority.get(p.wid)
     assert (lease.holder, lease.state, lease.epoch) == (p.a.id, "SOURCE", 2)  # fenced 1, rolled back 2
-    b_lease = p.b.ctx.authority.get(p.wid)
-    assert b_lease.holder is None and not p.b.ctx.authority.may_run(p.wid)
+    b_lease = p.b.ctx.authority.get(p.wid)  # B released, then may learn A's newer lease
+    assert b_lease.holder != p.b.id and not p.b.ctx.authority.may_run(p.wid)
     assert_single_copy(p)
 
 
@@ -138,9 +138,10 @@ async def test_abort_during_transfer(make_pair: PairFactory) -> None:
     assert st.phase == "ROLLED_BACK" and st.error == "aborted by user"
     assert p.a.host.states[p.wid] == "running"
     assert p.a.ctx.authority.get(p.wid).state == "SOURCE"
-    await asyncio.sleep(0.5)
-    b_status = p.b.manager.status(started.id)
-    assert b_status is not None and b_status.phase == "ROLLED_BACK"
+    deadline = asyncio.get_running_loop().time() + 10  # mig.abort queues behind slowed traffic
+    while (b_status := p.b.manager.status(started.id)) is None or b_status.phase != "ROLLED_BACK":
+        assert asyncio.get_running_loop().time() < deadline, b_status
+        await asyncio.sleep(0.05)
     assert p.world.started_on == [(p.a.id, p.wid)]
 
 

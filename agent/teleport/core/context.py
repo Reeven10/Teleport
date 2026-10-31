@@ -21,6 +21,7 @@ from .settings import Prefs, Settings, SimProfile
 
 if TYPE_CHECKING:
     from ..migration.store import CheckpointStore
+    from .peers import PeerDirectory
     from .workloads import WorkloadRunner
 
 
@@ -51,6 +52,11 @@ class Context:
             return self._services[name]
         except KeyError:
             raise RuntimeError(f"service {name!r} is not registered yet") from None
+
+    @property
+    def peer_directory(self) -> PeerDirectory:
+        """Known peer ids (cheap; use instead of peers.list_peers() in loops)."""
+        return cast("PeerDirectory", self._get("peer_directory"))
 
     @property
     def workloads(self) -> WorkloadRunner:

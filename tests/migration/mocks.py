@@ -114,6 +114,10 @@ class MockPeerLink:
             lost = DeviceLostEvent(deviceId=end.peer.ctx.device_id)
             asyncio.get_running_loop().create_task(end.ctx.bus.publish(lost))
 
+    def heal(self) -> None:
+        """The partition ends: both ends work again (same agents, same handlers)."""
+        self.is_cut = self.peer.is_cut = False
+
     def reconnect(self, ctx: Context) -> MockPeerLink:
         """The agent behind the other end restarted with `ctx`: a fresh end, attached to this one."""
         fresh = MockPeerLink(ctx)

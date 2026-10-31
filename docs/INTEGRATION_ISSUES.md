@@ -44,6 +44,8 @@ P1 worked around nothing silently; every workaround is named below with the issu
 - Files: `agent/teleport/devices/service.py` (`list_devices` and `local_info` call `probe_local_device` and `registry.upsert`, which saves the file each time).
 - Repro: `time curl localhost:8765/api/devices` gives about 0.4 s. `local_info()` is also called by feasibility, migration, the stats relay and every peer hello.
 - Fix: probe capabilities once at startup (and refresh on a timer if needed), cache `local_info()`, and only save the registry when something changed.
+- Impact confirmed after merging main (2026-11-01): `local_info()` runs synchronously on the event loop, so any caller blocks the agent for ~0.4 s. When the stats relay and lease sync called `peers.list_peers()` every second, a 126-byte chunk took 785 ms and the interruption time reached 3.3 s (budget 3 s).
+- P1 workaround: `core/peers.py` (`PeerDirectory`) keeps known peer ids from events, so P1 code no longer calls `list_peers()` in loops. Feasibility, migration start and each `/api/devices` call still pay the probe until this is fixed.
 
 ## P3: feasibility, orchestration, history
 

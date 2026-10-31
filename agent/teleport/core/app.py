@@ -67,8 +67,10 @@ def build_context(settings: Settings | None = None) -> Context:
     ctx.register("workloads", WorkloadRunner(ctx, CheckpointStore(settings.home)))
     for name, create in _entry_points():
         ctx.register(name, create(ctx))
+    from .peers import PeerDirectory
     from .relay import PeerStatsRelay
 
+    ctx.register("peer_directory", PeerDirectory(ctx))
     ctx.register("relay", PeerStatsRelay(ctx))
     # An agent bound to loopback is only reachable on loopback (dev:two), whatever its LAN addrs say.
     force: Any = getattr(ctx.peers, "set_forced_link", None)

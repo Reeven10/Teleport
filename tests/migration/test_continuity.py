@@ -236,8 +236,7 @@ async def test_link_lost_after_start_waits_instead_of_rolling_back(make_pair: Pa
     await until(waiting(p.a, mid), what="source waiting")
     assert p.a.manager.status(mid).phase == "STARTING_TARGET"  # type: ignore[union-attr]
     assert running_on(p) == set()  # A fenced, B never got mig.start
-    p.b.link = p.a.link.reconnect(p.b.ctx)  # same agents, link back
-    p.b.ctx.register("peers", p.b.link)
+    p.a.link.heal()  # same agents, link back
     st = await finished(p.a, mid)
     assert st.phase == "ROLLED_BACK" and "never took authority" in (st.error or "")
     await until(lambda: running_on(p) == {p.a.id}, what="A resumed")
@@ -270,6 +269,7 @@ async def test_split_brain_lower_epoch_stops_and_conflict_is_reported(make_pair:
     for side in (p.a, p.b):
         side.host.register(p.manifest, src)
     # Injected fault: during a partition both devices ended up holding the workload.
+    p.a.link.cut()
     await p.a.ctx.authority.grant(p.wid, p.a.id, 3)
     await p.b.ctx.authority.grant(p.wid, p.b.id, 2)
     await p.a.host.start(p.wid, restore=False)
@@ -286,6 +286,7 @@ async def test_split_brain_lower_epoch_stops_and_conflict_is_reported(make_pair:
 
         side.ctx.bus.subscribe(AuthorityConflictEvent, on_conflict)
 
+    p.a.link.heal()  # the partition ends: the next lease exchange finds the conflict
     await until(lambda: running_on(p) == {p.a.id}, what="the lower epoch to stop")
     await until(lambda: seen[p.a.id] and seen[p.b.id], what="conflict reported on both sides")
     for conflicts in seen.values():

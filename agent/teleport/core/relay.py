@@ -24,13 +24,11 @@ class PeerStatsRelay:
     async def _on_local_stats(self, event: StatsUpdateEvent) -> None:
         if event.stats.deviceId != self.ctx.device_id:
             return
-        for peer in self.ctx.peers.list_peers():
-            if self.ctx.peers.link_quality(peer.id) is None:  # only peers with a live link
-                continue
+        for peer in self.ctx.peer_directory.connected():
             try:
-                await self.ctx.peers.send(peer.id, PeerStats(stats=event.stats))
+                await self.ctx.peers.send(peer, PeerStats(stats=event.stats))
             except Exception as e:
-                log.debug("could not send stats to %s: %s", peer.id, e)
+                log.debug("could not send stats to %s: %s", peer, e)
 
     async def _on_peer_message(self, from_id: str, msg: PeerMessage) -> None:
         if isinstance(msg, PeerStats) and msg.stats.deviceId == from_id:

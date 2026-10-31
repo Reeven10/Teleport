@@ -991,7 +991,7 @@ class MigrationManager:
             await self._sync_leases()
 
     async def _sync_leases(self, only: str | None = None) -> None:
-        peers = [only] if only else [p.id for p in self.ctx.peers.list_peers()]
+        peers = [only] if only else self.ctx.peer_directory.ids()
         msg = AuthLeases(leases=self.ctx.authority.leases())
         for peer in peers:
             if self.ctx.peers.link_quality(peer) is None:
