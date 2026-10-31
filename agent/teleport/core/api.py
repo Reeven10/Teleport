@@ -87,7 +87,7 @@ class PrefsUpdate(BaseModel):
         return data
 
 
-def build_router(ctx: Context) -> APIRouter:
+def build_router(ctx: Context, history_routes: bool = True) -> APIRouter:
     r = APIRouter(prefix="/api")
 
     def find_device(device_id: str) -> DeviceInfo:
@@ -202,7 +202,7 @@ def build_router(ctx: Context) -> APIRouter:
         ctx.devices.set_override(req.deviceId, req.stats)
         return {"ok": True}
 
-    if getattr(ctx.history, "router", None) is None:  # a history module with its own routes owns them
+    if history_routes:  # otherwise the history module's own router serves /api/history
         add_history_routes(r, ctx)
 
     return r

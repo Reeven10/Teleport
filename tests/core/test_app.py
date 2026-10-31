@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from contract.contract import (
     AuthorityService,
     BusEventAdapter,
+    DevicePairedEvent,
     DeviceService,
     FeasibilityEngine,
     HistoryStore,
@@ -96,3 +97,20 @@ def test_dashboard_settings_persist_and_apply(tmp_path: Path) -> None:
         again = client.get("/api/settings").json()
         assert (again["mode"], again["preferredLink"], again["chunkSizeKb"]) == ("auto", "cable", 512)
         assert client.put("/api/settings", json={"preferredLink": "auto"}).json()["preferredLink"] == "auto"
+
+
+def test_history_module_router_is_mounted(client: TestClient) -> None:
+    import teleport.history
+
+    if not hasattr(teleport.history, "build_history_router"):
+        return  # P1 stub: core's minimal contract routes serve /api/history
+    assert client.get("/api/history/export").status_code == 200  # only P3's router has these
+    assert client.get("/api/history/devices/unknown").status_code == 404
+    assert client.get("/api/history/migrations?limit=5").json() == []
+    ctx: Context = client.app.state.ctx  # type: ignore[attr-defined]
+    peer = ctx.devices.local_info().model_copy(update={"id": "dev-peer", "name": "Peer"})
+    client.portal.call(ctx.bus.publish, DevicePairedEvent(device=peer))  # type: ignore[union-attr]
+    devices = client.get("/api/history/devices").json()
+    # P3's summaries, not core's DeviceInfo list: core's copy of the route must not shadow it
+    assert [d["id"] for d in devices] == ["dev-peer"] and "firstSeen" in devices[0]
+    assert client.get("/api/settings").json()["predictionWindowSec"] == 600

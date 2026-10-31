@@ -19,7 +19,8 @@
     "e2e": "playwright test --config ui/playwright.config.ts",
     "typecheck": "node scripts/py.mjs -m mypy && tsc -p ui/tsconfig.json",
     "lint": "node scripts/py.mjs -m ruff check . && eslint ui tests/ui contract",
-    "format": "node scripts/py.mjs -m ruff format . && node scripts/py.mjs -m ruff check --fix ."
+    "format": "node scripts/py.mjs -m ruff format . && node scripts/py.mjs -m ruff check --fix .",
+    "demo:reset": "node scripts/py.mjs demo/reset.py"
   },
   "dependencies": {
     "react": "^18.3.1",

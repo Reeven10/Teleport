@@ -260,3 +260,29 @@ accepted as a deprecated alias of `chunkSizeKb`, clamped to 16 to 512 KB, and ec
 - Also seen under heavy load: a spurious `device.lost` with the peer still alive. P1 now reconnects
   once (5 s) before acting on it, so migrations no longer roll back on a blip, but the transport
   should not emit it while the peer answers.
+
+## Hardening, round 2 (P1, requests from the laptop tests)
+
+Done by P1:
+- `npm run demo:reset` runs `demo/reset.py`. **That file is P4's and is not on `feat/core` yet**: the
+  script fails until P4's branch is merged.
+- `Prefs.remoteConsent` (`prompt | auto_allow | deny_all`) was already in `Prefs` and persists.
+- `Prefs.predictionWindowSec` now defaults to **600** s (5 to 3600), as P3's BatteryPredictor expects.
+  It is settable through `PUT /api/settings`.
+- **P3-11 fixed:** core mounts `teleport.history.build_history_router(ctx)` (or the history store's
+  `router` attribute, if P3 adds one later). Core's minimal `/api/history/*` routes now step aside,
+  so nothing is shadowed.
+- **P3-9 (partly):** the contract's `HistoryStore` Protocol now declares what P3's store provides
+  (`list_migrations` and `list_decisions` filters, `list_device_summaries`, `get_device_detail`,
+  `get_migration`, `export_history`). The 19 mypy errors in `history/router.py` are gone (32 left
+  repo-wide, all in P3/P4 files).
+
+**P4-11. The History page must read P3's device summaries.**
+- File: `ui/src/api.ts:182` (`apiGetHistoryDevices` is typed `DeviceInfo[]`).
+- Symptom: with P3's router mounted, `GET /api/history/devices` returns
+  `{id, firstSeen, lastSeen, device: DeviceInfo, linkTypes, migrationCount}[]`, so fields like `name`
+  and `arch` are under `.device`.
+- Fix: type it as the summary, read `d.device.name` etc., and show `firstSeen`, `lastSeen` and
+  `migrationCount`. `GET /api/history/migrations` (`MigrationStatus[]`, 50 per page, `?limit=&offset=`) and
+  `/decisions` (`DecisionLog[]`, 100 per page) keep the contract types. `/migrations/{id}` gives the full
+  record with timeline and metrics for the post-mortem view.
