@@ -4,11 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from teleport.feasibility.engine import (
-    best_target,
-    calculate_estimates,
-    evaluate_feasibility,
-)
 from contract.contract import (
     Battery,
     CheckpointDef,
@@ -17,6 +12,11 @@ from contract.contract import (
     RuntimeReq,
     Stats,
     WorkloadManifest,
+)
+from teleport.feasibility.engine import (
+    best_target,
+    calculate_estimates,
+    evaluate_feasibility,
 )
 
 

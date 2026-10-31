@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from contract.contract import Decision, FeasibilityResult, Reason
+from contract.contract import FeasibilityResult, Reason
 
 
 class FeasibilityExplanation(BaseModel):

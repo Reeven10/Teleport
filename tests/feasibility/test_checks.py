@@ -4,6 +4,15 @@ from __future__ import annotations
 
 import pytest
 
+from contract.contract import (
+    Battery,
+    CheckpointDef,
+    DeviceInfo,
+    LinkQuality,
+    RuntimeReq,
+    Stats,
+    WorkloadManifest,
+)
 from teleport.feasibility.checks import (
     check_architecture,
     check_cpu_cores,
@@ -18,15 +27,6 @@ from teleport.feasibility.checks import (
     check_target_online,
     compare_versions,
     run_all_checks,
-)
-from contract.contract import (
-    Battery,
-    CheckpointDef,
-    DeviceInfo,
-    LinkQuality,
-    RuntimeReq,
-    Stats,
-    WorkloadManifest,
 )
 from tests.feasibility.fixtures import (
     ALL_DEVICE_FILES,

@@ -5,10 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from teleport.core.context import Context
-from teleport.core.settings import Settings
-from teleport.history.schema import CURRENT_SCHEMA_VERSION, initialize_database
-from teleport.history.store import SqliteHistoryStore
 from contract.contract import (
     Authority,
     AuthorityChangeEvent,
@@ -20,6 +16,10 @@ from contract.contract import (
     MigrationStatusEvent,
     Reason,
 )
+from teleport.core.context import Context
+from teleport.core.settings import Settings
+from teleport.history.schema import CURRENT_SCHEMA_VERSION, initialize_database
+from teleport.history.store import SqliteHistoryStore
 
 
 def make_dummy_context(tmp_path: Path) -> Context:
