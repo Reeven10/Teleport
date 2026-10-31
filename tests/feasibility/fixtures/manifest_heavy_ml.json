@@ -1,0 +1,25 @@
+{
+  "id": "w-heavy-ml",
+  "name": "Heavy ML Training Job",
+  "command": "python train.py --epochs 100 --batch-size 64",
+  "runtime": {
+    "name": "python",
+    "minVersion": "3.11"
+  },
+  "arch": ["x86_64"],
+  "os": ["linux"],
+  "minRamMb": 16384,
+  "minCpuCores": 8,
+  "minDiskMb": 20000,
+  "needsGpu": true,
+  "libs": ["torch", "torchvision", "numpy"],
+  "checkpoints": [
+    {
+      "id": "c1",
+      "name": "weights",
+      "paths": ["checkpoint.pt", "optimizer.pt"]
+    }
+  ],
+  "remoteCapable": false
+}
+

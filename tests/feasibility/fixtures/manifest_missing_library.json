@@ -1,0 +1,25 @@
+{
+  "id": "w-missing-lib",
+  "name": "Service Requiring Custom Lib",
+  "command": "python custom_service.py",
+  "runtime": {
+    "name": "python",
+    "minVersion": "3.11"
+  },
+  "arch": ["x86_64", "arm64"],
+  "os": ["windows", "linux", "macos"],
+  "minRamMb": 1024,
+  "minCpuCores": 2,
+  "minDiskMb": 500,
+  "needsGpu": false,
+  "libs": ["requests", "obscure_teleport_codec_v9"],
+  "checkpoints": [
+    {
+      "id": "c1",
+      "name": "session",
+      "paths": ["session.db"]
+    }
+  ],
+  "remoteCapable": true
+}
+

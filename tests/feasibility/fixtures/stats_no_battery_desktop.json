@@ -1,0 +1,11 @@
+{
+  "deviceId": "dev-desktop-x86",
+  "ts": 1700000000.0,
+  "cpuPct": 12.0,
+  "memPct": 30.0,
+  "memFreeMb": 24000,
+  "diskFreeMb": 480000,
+  "battery": null,
+  "online": true
+}
+

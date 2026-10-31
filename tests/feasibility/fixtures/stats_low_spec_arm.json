@@ -1,0 +1,14 @@
+{
+  "deviceId": "dev-low-arm",
+  "ts": 1700000000.0,
+  "cpuPct": 88.0,
+  "memPct": 80.0,
+  "memFreeMb": 128,
+  "diskFreeMb": 500,
+  "battery": {
+    "pct": 95.0,
+    "charging": true
+  },
+  "online": true
+}
+

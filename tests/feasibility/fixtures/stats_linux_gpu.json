@@ -1,0 +1,11 @@
+{
+  "deviceId": "dev-linux-gpu",
+  "ts": 1700000000.0,
+  "cpuPct": 5.0,
+  "memPct": 25.0,
+  "memFreeMb": 48000,
+  "diskFreeMb": 980000,
+  "battery": null,
+  "online": true
+}
+
