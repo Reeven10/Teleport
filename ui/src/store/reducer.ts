@@ -4,8 +4,8 @@ import type { MetricHistoryPoint, StoreAction, TeleportState, WorkloadItem } fro
 export function createInitialState(): TeleportState {
   const savedTheme = typeof window !== 'undefined' ? (localStorage.getItem('teleport_theme') as 'dark' | 'light' | null) : null;
   return {
-    thisDeviceId: 'device-a',
-    peerDeviceId: 'device-b',
+    thisDeviceId: '',
+    peerDeviceId: null,
     devices: {},
     stats: {},
     history60s: {},
@@ -113,7 +113,32 @@ export function storeReducer(state: TeleportState, action: StoreAction): Telepor
     }
 
     case 'TOGGLE_MOCK_FEEDER': {
-      const next: TeleportState = { ...state, mockFeederActive: action.payload };
+      if (!action.payload) {
+        // Filter out simulated devices, stats, and history when feeder is toggled off
+        const realDevices = Object.fromEntries(
+          Object.entries(state.devices).filter(([, d]) => !d.simulated)
+        );
+        const realStats = Object.fromEntries(
+          Object.entries(state.stats).filter(([, s]) => !s.simulated)
+        );
+        const realDevIds = Object.keys(realDevices);
+        const thisDev = realDevIds[0] ?? '';
+        const peerDev = realDevIds[1] ?? null;
+
+        const next: TeleportState = {
+          ...state,
+          mockFeederActive: false,
+          devices: realDevices,
+          stats: realStats,
+          thisDeviceId: thisDev,
+          peerDeviceId: peerDev,
+          migrationStatus: state.migrationStatus?.sourceId.startsWith('device-') ? null : state.migrationStatus,
+          recommendation: state.recommendation?.targetId?.startsWith('device-') ? null : state.recommendation,
+        };
+        next.isSimulated = checkSimulated(next);
+        return next;
+      }
+      const next: TeleportState = { ...state, mockFeederActive: true };
       next.isSimulated = checkSimulated(next);
       return next;
     }
@@ -146,6 +171,10 @@ export function storeReducer(state: TeleportState, action: StoreAction): Telepor
         ...state,
         workloads: [...state.workloads.filter((w) => w.manifest.id !== action.payload.manifest.id), action.payload],
       };
+    }
+
+    case 'CLEAR_RECOMMENDATION': {
+      return { ...state, recommendation: null };
     }
 
     default:

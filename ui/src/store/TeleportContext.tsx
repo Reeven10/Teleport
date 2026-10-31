@@ -172,11 +172,23 @@ export function TeleportProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'ADD_WORKLOAD', payload: item });
   }, []);
 
+  const setSimulationScenario = useCallback((scenario: import('../mock/mockFeeder.ts').MockScenario) => {
+    if (mockFeederRef.current) {
+      mockFeederRef.current.setScenario(scenario);
+    }
+  }, []);
+
+  const clearRecommendation = useCallback(() => {
+    dispatch({ type: 'CLEAR_RECOMMENDATION' });
+  }, []);
+
   const value: TeleportContextValue = {
     state,
     dispatch,
     toggleTheme,
     toggleMockFeeder,
+    setSimulationScenario,
+    clearRecommendation,
     selectPeer,
     addPairedDevice,
     addWorkload,

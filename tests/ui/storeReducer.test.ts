@@ -5,8 +5,8 @@ import { createInitialState, storeReducer } from '@/store/reducer.ts';
 describe('storeReducer', () => {
   it('creates clean initial state with defaults', () => {
     const state = createInitialState();
-    expect(state.thisDeviceId).toBe('device-a');
-    expect(state.peerDeviceId).toBe('device-b');
+    expect(state.thisDeviceId).toBe('');
+    expect(state.peerDeviceId).toBeNull();
     expect(state.mockFeederActive).toBe(true);
     expect(state.isSimulated).toBe(true);
   });

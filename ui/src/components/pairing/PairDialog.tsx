@@ -7,11 +7,12 @@ import { formatArch, formatOs } from '../../utils/formatters.ts';
 interface PairDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  initialAddress?: string;
 }
 
-export function PairDialog({ isOpen, onClose }: PairDialogProps) {
+export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps) {
   const { state, addPairedDevice, selectPeer } = useTeleport();
-  const [address, setAddress] = useState('192.168.1.102:8765');
+  const [address, setAddress] = useState(initialAddress || '192.168.1.102:8765');
   const [pin, setPin] = useState('749218');
   const [localPin] = useState('381904'); // Local PIN for the peer to enter
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,11 +28,31 @@ export function PairDialog({ isOpen, onClose }: PairDialogProps) {
     setStatusMessage(null);
 
     try {
+      // If agent is reachable, always use real backend API
+      if (state.agentReachable) {
+        const res = await apiPairDevice(address, pin);
+        if (res.ok && res.device) {
+          addPairedDevice(res.device);
+          selectPeer(res.device.id);
+          setStatusMessage({ type: 'success', text: `Paired successfully with ${res.device.name}!` });
+        } else {
+          setStatusMessage({ type: 'error', text: res.error ?? 'Pairing failed: peer agent rejected PIN/address.' });
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Offline / standalone mock feeder mode: require exact PIN validation
       if (state.mockFeederActive) {
-        // Mock pairing behavior
+        if (pin.trim() !== '749218') {
+          setStatusMessage({ type: 'error', text: 'Pairing rejected: Invalid PIN for peer device (expected 749218 in simulation).' });
+          setIsSubmitting(false);
+          return;
+        }
+
         const mockNewDevice: DeviceInfo = {
           id: `dev-${Date.now().toString(36).slice(-4)}`,
-          name: `Peer Node (${address.split(':')[0]})`,
+          name: `Peer Node [SIMULATED] (${address.split(':')[0]})`,
           os: 'linux',
           arch: 'x86_64',
           cpuCores: 8,
@@ -46,19 +67,13 @@ export function PairDialog({ isOpen, onClose }: PairDialogProps) {
         };
         addPairedDevice(mockNewDevice);
         selectPeer(mockNewDevice.id);
-        setStatusMessage({ type: 'success', text: `Successfully paired with ${mockNewDevice.name}!` });
+        setStatusMessage({ type: 'success', text: `Simulated pairing validated with ${mockNewDevice.name}.` });
         setIsSubmitting(false);
         return;
       }
 
-      const res = await apiPairDevice(address, pin);
-      if (res.ok && res.device) {
-        addPairedDevice(res.device);
-        selectPeer(res.device.id);
-        setStatusMessage({ type: 'success', text: `Paired successfully with ${res.device.name}!` });
-      } else {
-        setStatusMessage({ type: 'error', text: res.error ?? 'Pairing failed. Verify PIN and address.' });
-      }
+      // If neither agent reachable nor mock feeder:
+      setStatusMessage({ type: 'error', text: 'Agent is unreachable. Check connection on :8765.' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatusMessage({ type: 'error', text: `Connection error: ${msg}` });

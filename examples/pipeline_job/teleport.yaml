@@ -1,0 +1,45 @@
+id: pipeline-job
+name: Pipeline Batch Processor
+command: python main.py
+runtime:
+  name: python
+  minVersion: "3.11"
+arch:
+  - x86_64
+  - arm64
+os:
+  - windows
+  - linux
+  - macos
+minRamMb: 512
+minCpuCores: 1
+minDiskMb: 100
+needsGpu: false
+remoteCapable: false
+libs: []
+checkpoints:
+  - id: config
+    name: Job Configuration
+    paths:
+      - config.json
+  - id: input_data
+    name: Raw Records Dataset
+    paths:
+      - input_data.json
+  - id: stage1_output
+    name: Normalized Stage 1 Records
+    paths:
+      - stage1.json
+  - id: stage2_output
+    name: Aggregated Stage 2 Metrics
+    paths:
+      - stage2.json
+  - id: model_index
+    name: Feature Vector Index
+    paths:
+      - model_index.json
+  - id: progress
+    name: Processing Cursor Progress
+    paths:
+      - progress.json
+

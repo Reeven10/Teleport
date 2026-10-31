@@ -1,0 +1,26 @@
+id: notepad-app
+name: Collaborative Scratchpad GUI
+command: python main.py
+runtime:
+  name: python
+  minVersion: "3.11"
+arch:
+  - x86_64
+  - arm64
+os:
+  - windows
+  - linux
+  - macos
+minRamMb: 256
+minCpuCores: 1
+minDiskMb: 50
+needsGpu: false
+remoteCapable: true
+libs: []
+checkpoints:
+  - id: document_state
+    name: Document Text & Metadata
+    paths:
+      - document.txt
+      - state.json
+

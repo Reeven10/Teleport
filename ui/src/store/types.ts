@@ -53,5 +53,6 @@ export type StoreAction =
   | { type: 'SET_THEME'; payload: 'dark' | 'light' }
   | { type: 'SELECT_PEER'; payload: string }
   | { type: 'ADD_PAIRED_DEVICE'; payload: DeviceInfo }
-  | { type: 'ADD_WORKLOAD'; payload: WorkloadItem };
+  | { type: 'ADD_WORKLOAD'; payload: WorkloadItem }
+  | { type: 'CLEAR_RECOMMENDATION' };
 

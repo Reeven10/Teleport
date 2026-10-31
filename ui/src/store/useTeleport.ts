@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { DeviceInfo } from '@contract';
+import type { MockScenario } from '../mock/mockFeeder.ts';
 import type { StoreAction, TeleportState, WorkloadItem } from './types.ts';
 
 export interface TeleportContextValue {
@@ -7,6 +8,8 @@ export interface TeleportContextValue {
   dispatch: (action: StoreAction) => void;
   toggleTheme: () => void;
   toggleMockFeeder: (enable?: boolean) => void;
+  setSimulationScenario: (scenario: MockScenario) => void;
+  clearRecommendation: () => void;
   selectPeer: (peerId: string) => void;
   addPairedDevice: (device: DeviceInfo) => void;
   addWorkload: (item: WorkloadItem) => void;
@@ -21,4 +24,3 @@ export function useTeleport(): TeleportContextValue {
   }
   return ctx;
 }
-
