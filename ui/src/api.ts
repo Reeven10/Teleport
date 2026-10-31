@@ -1,4 +1,12 @@
-import type { BusEvent, DeviceInfo, Stats, WorkloadManifest } from '@contract';
+import type {
+  BusEvent,
+  DeviceInfo,
+  MigrationStatus,
+  RemoteSession,
+  Stats,
+  Trigger,
+  WorkloadManifest,
+} from '@contract';
 import type { WorkloadItem } from './store/types.ts';
 
 const agentParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('agent') : null;
@@ -115,4 +123,32 @@ export async function apiPairDevice(addr: string, pin: string): Promise<{ ok: bo
 
 export async function apiStartWorkload(manifestPath: string): Promise<{ ok: boolean; workloadId?: string; error?: string }> {
   return postJson<{ ok: boolean; workloadId?: string; error?: string }>('/api/workloads/start', { manifestPath });
+}
+
+export async function apiStartMigration(
+  workloadId: string,
+  targetId: string,
+  trigger: Trigger = 'user_command',
+): Promise<MigrationStatus> {
+  return postJson<MigrationStatus>('/api/migrations', { workloadId, targetId, trigger });
+}
+
+export async function apiAbortMigration(migrationId: string): Promise<MigrationStatus> {
+  return postJson<MigrationStatus>(`/api/migrations/${migrationId}/abort`, {});
+}
+
+export async function apiStartRemote(workloadId: string, viewerId: string): Promise<RemoteSession> {
+  return postJson<RemoteSession>('/api/remote/start', { workloadId, viewerId });
+}
+
+export async function apiConsentRemote(sessionId: string, allow: boolean): Promise<RemoteSession> {
+  return postJson<RemoteSession>('/api/remote/consent', { sessionId, allow });
+}
+
+export async function apiStopRemote(sessionId: string): Promise<{ ok: boolean }> {
+  return postJson<{ ok: boolean }>('/api/remote/stop', { sessionId });
+}
+
+export async function apiGetRemoteToken(sessionId: string): Promise<{ sessionId: string; token: string }> {
+  return getJson<{ sessionId: string; token: string }>(`/api/remote/token/${sessionId}`);
 }

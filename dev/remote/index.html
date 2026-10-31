@@ -189,19 +189,13 @@
         const data = await res.json();
         sessionInput.value = data.id;
 
-        // Fetch one-time token for convenience
-        const tokRes = await fetch(`${agentInput.value}/api/remote/token/${data.id}`);
-        if (tokRes.ok) {
-          const tokData = await tokRes.json();
-          tokenInput.value = tokData.token;
-        }
-        logStatus('Session created (Pending Consent)', '#f59e0b');
+        logStatus('Session created (Pending Host Consent)', '#f59e0b');
       } catch (err) {
         logStatus(`Start failed: ${err.message}`, '#f43f5e');
       }
     });
 
-    // 2. Approve Consent
+    // 2. Approve Consent & Fetch Token
     document.getElementById('btnConsent').addEventListener('click', async () => {
       try {
         const sid = sessionInput.value;
@@ -212,7 +206,14 @@
           body: JSON.stringify({ sessionId: sid, allow: true })
         });
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        logStatus('Consent granted!', '#10b981');
+
+        // Fetch one-time token once consent is granted
+        const tokRes = await fetch(`${agentInput.value}/api/remote/token/${sid}`);
+        if (tokRes.ok) {
+          const tokData = await tokRes.json();
+          tokenInput.value = tokData.token;
+        }
+        logStatus('Consent granted & Token retrieved! Ready to connect.', '#10b981');
       } catch (err) {
         logStatus(`Consent failed: ${err.message}`, '#f43f5e');
       }

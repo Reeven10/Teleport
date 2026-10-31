@@ -63,15 +63,19 @@ def test_remote_websocket_streaming_and_input(tmp_path: Path) -> None:
         assert start_res.status_code == 200
         session_id = start_res.json()["id"]
 
-        # 2. Get one-time token
-        tok_res = client.get(f"/api/remote/token/{session_id}")
-        assert tok_res.status_code == 200
-        token = tok_res.json()["token"]
+        # 2. Before consent, token endpoint must reject with 403
+        unauth_tok = client.get(f"/api/remote/token/{session_id}")
+        assert unauth_tok.status_code == 403
 
         # 3. Approve consent
         consent_res = client.post("/api/remote/consent", json={"sessionId": session_id, "allow": True})
         assert consent_res.status_code == 200
         assert consent_res.json()["consent"] is True
+
+        # 4. Now token endpoint generates token
+        tok_res = client.get(f"/api/remote/token/{session_id}")
+        assert tok_res.status_code == 200
+        token = tok_res.json()["token"]
 
         # Inject mock input controller into active host session
         active_session = remote_svc._sessions[session_id]

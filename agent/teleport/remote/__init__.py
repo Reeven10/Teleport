@@ -74,8 +74,11 @@ class RemoteServiceImpl:
 
         @self.router.get("/token/{session_id}")
         async def get_token(session_id: str) -> dict[str, Any]:
-            if session_id not in self._sessions:
+            session = self._sessions.get(session_id)
+            if not session:
                 raise HTTPException(404, f"unknown session {session_id}")
+            if not session.consent:
+                raise HTTPException(403, f"consent not granted for session {session_id}")
             token = self.token_manager.generate_token(session_id)
             return {"sessionId": session_id, "token": token}
 
@@ -154,14 +157,16 @@ class RemoteServiceImpl:
             await websocket.close(code=4404, reason=f"unknown remote session {session_id}")
             return
 
-        # Token validation: check query params or query string ?token=...
+        # Token validation: strictly require a valid one-time token
         token = websocket.query_params.get("token", "")
-        # Enforce single-use tokens per prompt requirements
-        if token:
-            valid = self.token_manager.validate_and_consume(session_id, token)
-            if not valid:
-                await websocket.close(code=4401, reason="invalid or expired one-time token")
-                return
+        if not token:
+            await websocket.close(code=4401, reason="missing one-time token")
+            return
+
+        valid = self.token_manager.validate_and_consume(session_id, token)
+        if not valid:
+            await websocket.close(code=4401, reason="invalid or expired one-time token")
+            return
 
         def get_link_quality(viewer_id: str) -> LinkQuality | None:
             try:

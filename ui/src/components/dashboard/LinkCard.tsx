@@ -62,7 +62,7 @@ export function LinkCard({ link, peerOnline }: LinkCardProps) {
           <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
         </div>
         <span className="mt-1 text-[10px] font-mono text-slate-400 dark:text-slate-500">
-          AES-256-GCM
+          Peer Transport Link
         </span>
       </div>
 
