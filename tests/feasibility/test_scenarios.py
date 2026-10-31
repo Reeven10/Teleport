@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 import yaml
 
@@ -15,17 +17,17 @@ from dev.feasibility.runner import (
 from teleport.feasibility.engine import evaluate_feasibility
 
 
-def load_all_scenarios() -> list[dict]:
+def load_all_scenarios() -> list[dict[str, Any]]:
     with open(SCENARIOS_PATH, encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    return data.get("scenarios", [])
+    return cast(list[dict[str, Any]], data.get("scenarios", []))
 
 
 ALL_SCENARIOS = load_all_scenarios()
 
 
 @pytest.mark.parametrize("sc", ALL_SCENARIOS, ids=lambda sc: sc["id"])
-def test_scenario_passes(sc: dict) -> None:
+def test_scenario_passes(sc: dict[str, Any]) -> None:
     manifest = _resolve_manifest(sc["manifest"])
     source = _resolve_device(sc["source"])
     target = _resolve_device(sc["target"])

@@ -38,7 +38,7 @@ def _resolve_manifest(spec: Any) -> WorkloadManifest:
         runtime = (
             RuntimeReq(name=rt_spec["name"], minVersion=rt_spec["minVersion"])
             if rt_spec
-            else None
+            else RuntimeReq(name="python", minVersion="3.11")
         )
         return WorkloadManifest(
             id=spec["id"],

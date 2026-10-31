@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from contract.contract import DeviceInfo, LinkQuality, Stats, WorkloadManifest
 
@@ -15,11 +16,11 @@ def get_fixture_path(filename: str) -> Path:
     return FIXTURES_DIR / filename
 
 
-def load_fixture_json(filename: str) -> dict:
+def load_fixture_json(filename: str) -> dict[str, Any]:
     """Read a JSON fixture file and return parsed dict."""
     path = get_fixture_path(filename)
     with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        return cast(dict[str, Any], json.load(f))
 
 
 def load_device(filename: str) -> DeviceInfo:

@@ -8,6 +8,7 @@ and candidate recommendation), checks triggers, and generates dev/orchestration/
 from __future__ import annotations
 
 import asyncio
+import builtins
 import sys
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,12 @@ class DummyDevices:
     def __init__(self, devices: list[DeviceInfo]) -> None:
         self._devs = {d.id: d for d in devices}
 
+    async def startup(self) -> None:
+        pass
+
+    async def shutdown(self) -> None:
+        pass
+
     def list_devices(self) -> list[DeviceInfo]:
         return list(self._devs.values())
 
@@ -59,6 +66,12 @@ class DummyPeers:
         self._peers = {p.id: p for p in peers}
         self._link = link
 
+    async def startup(self) -> None:
+        pass
+
+    async def shutdown(self) -> None:
+        pass
+
     def list_peers(self) -> list[DeviceInfo]:
         return list(self._peers.values())
 
@@ -70,10 +83,16 @@ class DummyWorkloads:
     def __init__(self, manifests: list[WorkloadManifest]) -> None:
         self._manifests = manifests
 
-    def list(self) -> list[WorkloadManifest]:
+    async def startup(self) -> None:
+        pass
+
+    async def shutdown(self) -> None:
+        pass
+
+    def list(self) -> builtins.list[WorkloadManifest]:
         return self._manifests
 
-    def runs(self) -> list[Any]:
+    def runs(self) -> builtins.list[Any]:
         return []
 
 
@@ -166,7 +185,7 @@ def _make_stats(
 
 async def run_all_series() -> tuple[int, int, str]:
     tmp_path = Path("/tmp/orchestrator_series_test")
-    results = []
+    results: list[tuple[str, str, str, str, str]] = []
 
     # 1. Steady
     clock1 = FakeClock()
@@ -324,8 +343,8 @@ async def run_all_series() -> tuple[int, int, str]:
         "| Series | Description | Expected Trigger | Actual Trigger | Status |",
         "| :--- | :--- | :--- | :--- | :--- |",
     ]
-    for name, desc, exp, act, st in results:
-        lines.append(f"| **{name}** | {desc} | `{exp}` | `{act}` | **{st}** |")
+    for name, desc, exp, act, status in results:
+        lines.append(f"| **{name}** | {desc} | `{exp}` | `{act}` | **{status}** |")
 
     lines.extend([
         "",

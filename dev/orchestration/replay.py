@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import builtins
 import json
 import sys
 from pathlib import Path
@@ -37,10 +38,10 @@ class MockWorkloadService:
     def __init__(self, workloads: list[WorkloadManifest]) -> None:
         self._workloads = workloads
 
-    def list(self) -> list[WorkloadManifest]:
+    def list(self) -> builtins.list[WorkloadManifest]:
         return self._workloads
 
-    def runs(self) -> list[Any]:
+    def runs(self) -> builtins.list[Any]:
         return []
 
 
