@@ -6,7 +6,16 @@ import {
   type ReactNode,
 } from 'react';
 import type { BusEvent, DeviceInfo } from '@contract';
-import { apiFetchDevices, apiFetchStats, apiFetchWorkloads, connectEvents } from '../api.ts';
+import {
+  apiFetchDevices,
+  apiFetchHealth,
+  apiFetchMigrations,
+  apiFetchRemoteSessions,
+  apiFetchStats,
+  apiFetchWorkloadRuns,
+  apiFetchWorkloads,
+  connectEvents,
+} from '../api.ts';
 import {
   MOCK_DEVICE_A,
   MOCK_DEVICE_B,
@@ -108,19 +117,37 @@ export function TeleportProvider({ children }: { children: ReactNode }) {
 
     async function initRest() {
       try {
-        const [devices, stats, workloads] = await Promise.all([
-          apiFetchDevices(),
-          apiFetchStats(),
-          apiFetchWorkloads(),
-        ]);
-        if (!unmounted && devices.length > 0) {
-          dispatch({ type: 'INIT_REST', payload: { devices, stats, workloads } });
+        const health = await apiFetchHealth();
+        const [devices, stats, workloads, migrations, workloadRuns, remoteSessions] =
+          await Promise.all([
+            apiFetchDevices().catch(() => []),
+            apiFetchStats().catch(() => []),
+            apiFetchWorkloads().catch(() => []),
+            apiFetchMigrations().catch(() => []),
+            apiFetchWorkloadRuns().catch(() => []),
+            apiFetchRemoteSessions().catch(() => []),
+          ]);
+
+        if (!unmounted && health.ok) {
+          dispatch({
+            type: 'INIT_REST',
+            payload: {
+              thisDeviceId: health.deviceId,
+              devices,
+              stats,
+              workloads,
+              migrations,
+              workloadRuns,
+              remoteSessions,
+            },
+          });
           dispatch({ type: 'SET_AGENT_REACHABLE', payload: true });
         }
       } catch {
-        // Agent not reachable -> leave mock feeder active
+        // Agent not reachable -> activate mock feeder
         if (!unmounted) {
           dispatch({ type: 'SET_AGENT_REACHABLE', payload: false });
+          dispatch({ type: 'TOGGLE_MOCK_FEEDER', payload: true });
         }
       }
     }

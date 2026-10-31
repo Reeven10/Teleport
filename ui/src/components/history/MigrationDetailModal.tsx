@@ -155,6 +155,41 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
             </div>
           </div>
 
+          {/* Migration Detailed Performance Metrics (if available) */}
+          {migration.metrics && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-slate-800 dark:bg-slate-800/30">
+              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Wire Metrics & Deduplication
+              </h4>
+              <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs font-mono">
+                <div>
+                  <span className="text-[10px] text-slate-400">Throughput:</span>
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {migration.metrics.throughputMbps.toFixed(1)} Mbps
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400">Wire Duration:</span>
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {migration.metrics.durationMs} ms
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400">Skipped/Dedup:</span>
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {formatBytes(migration.metrics.bytesSkipped)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400">Chunk Buffer:</span>
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {Math.round(migration.metrics.chunkSize / 1024)} KB
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Error Banner if rolled back */}
           {migration.error && (
             <div data-testid="detail-error-banner" className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">

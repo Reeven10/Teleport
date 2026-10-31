@@ -1,9 +1,9 @@
-"""Collaborative Scratchpad GUI App.
+#!/usr/bin/env python3
+"""Interactive GUI Notepad / Collaborative Scratchpad for Teleport Remote Access.
 
-Interactive desktop text editor using Tkinter (with headless fallback for CI).
-Used to demonstrate remote access with real mouse and keyboard input forwarding.
-Keeps document text and cursor position in state checkpoints.
-Runs standalone without Teleport.
+Demonstrates fallback to Remote Access: when evaluated for migration,
+feasibility confirms it is interactive and remoteCapable, allowing viewers to
+connect to the host screen and inject keystrokes/clicks remotely.
 """
 
 from __future__ import annotations
@@ -13,21 +13,9 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
-# Optional Teleport SDK import
-try:
-    import teleport_sdk as teleport
-except ImportError:
-    repo_sdk = Path(__file__).resolve().parents[2] / "sdk"
-    if repo_sdk.exists():
-        sys.path.insert(0, str(repo_sdk))
-        try:
-            import teleport_sdk as teleport
-        except ImportError:
-            teleport = None
-    else:
-        teleport = None
-
+import teleport_sdk as teleport
 
 DEFAULT_TEXT = (
     "=== Teleport Collaborative Scratchpad ===\n\n"
@@ -38,12 +26,19 @@ DEFAULT_TEXT = (
 )
 
 
-def load_doc() -> tuple[str, dict[str, object]]:
+def load_doc() -> tuple[str, dict[str, Any]]:
     text_path = Path("document.txt")
     state_path = Path("state.json")
 
     text = text_path.read_text(encoding="utf-8") if text_path.exists() else DEFAULT_TEXT
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    state: dict[str, Any] = {}
+    if state_path.exists():
+        try:
+            loaded = json.loads(state_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                state = loaded
+        except Exception:
+            state = {}
     return text, state
 
 
@@ -58,123 +53,112 @@ def save_doc(text: str, cursor_index: str = "1.0") -> None:
 
 
 def run_tkinter(initial_text: str, sdk_active: bool) -> None:
+    """Run standard Tkinter GUI desktop window."""
     import tkinter as tk
+    from tkinter import scrolledtext
 
     root = tk.Tk()
-    root.title("Teleport Collaborative Scratchpad")
+    root.title("Teleport Notepad (Host Workspace)")
     root.geometry("640x480")
 
-    header_frame = tk.Frame(root, bg="#1e293b", height=40)
-    header_frame.pack(fill=tk.X)
-
-    title_label = tk.Label(
-        header_frame,
-        text="Teleport Scratchpad [Remote Access Viewport Ready]",
-        bg="#1e293b",
-        fg="#38bdf8",
+    # Header label
+    lbl = tk.Label(
+        root,
+        text="Teleport Remote Access Workload - Interactive GUI",
         font=("Segoe UI", 10, "bold"),
-        padx=10,
+        bg="#1e293b",
+        fg="#f8fafc",
         pady=8,
     )
-    title_label.pack(side=tk.LEFT)
+    lbl.pack(fill=tk.X)
 
-    status_var = tk.StringVar(value="Ready")
-    status_label = tk.Label(
-        header_frame,
-        textvariable=status_var,
-        bg="#1e293b",
-        fg="#94a3b8",
-        font=("Segoe UI", 9),
-        padx=10,
+    # Scrolled text area
+    text_area = scrolledtext.ScrolledText(
+        root,
+        wrap=tk.WORD,
+        font=("Consolas", 11),
+        undo=True,
     )
-    status_label.pack(side=tk.RIGHT)
+    text_area.insert(tk.INSERT, initial_text)
+    text_area.pack(expand=True, fill=tk.BOTH, padx=4, pady=4)
 
-    text_area = tk.Text(root, font=("Consolas", 11), wrap=tk.WORD, undo=True)
-    text_area.insert("1.0", initial_text)
-    text_area.pack(expand=True, fill=tk.BOTH, padx=8, pady=8)
-
-    def on_change(event: object = None) -> None:
+    # Autosave timer
+    def autosave() -> None:
+        if sdk_active and teleport.should_stop():
+            root.destroy()
+            return
         content = text_area.get("1.0", tk.END)
         cur = text_area.index(tk.INSERT)
         save_doc(content, cur)
-        if sdk_active and teleport:
-            teleport.checkpoint("document_state", {
-                "text": content,
-                "cursor": cur,
-                "ts": time.time(),
-            })
-        status_var.set(f"Chars: {len(content)} · Saved")
+        if sdk_active:
+            teleport.checkpoint("document", {"text": content, "cursor": cur})
+        root.after(1000, autosave)
 
-    text_area.bind("<KeyRelease>", on_change)
-
-    def check_teleport_stop() -> None:
-        if sdk_active and teleport and teleport.should_stop():
-            print("[Notepad] Stop requested by controller. Saving state...", flush=True)
-            on_change()
-            root.destroy()
-            return
-        root.after(500, check_teleport_stop)
-
-    root.after(500, check_teleport_stop)
+    root.after(1000, autosave)
     root.mainloop()
 
 
-def run_headless(initial_text: str, sdk_active: bool) -> None:
-    print("[Notepad] Running in headless/console mode...", flush=True)
-    content = initial_text
-    step = 0
+def run_headless_simulation(initial_text: str, sdk_active: bool) -> None:
+    """Fallback runner for headless environments (CI / servers without X11 or DISPLAY)."""
+    print(
+        "[Notepad] Collaborative Scratchpad active (headless simulation). Running text loop...",
+        flush=True,
+    )
+    text = initial_text
+    counter = 0
+
     while True:
-        if sdk_active and teleport and teleport.should_stop():
+        if sdk_active and teleport.should_stop():
             print("[Notepad] Stopped by controller.", flush=True)
             break
-        step += 1
-        content += f"\n[Auto-Note {step:03d}] Remote operator heartbeat @ {time.strftime('%X')}"
-        save_doc(content)
-        if sdk_active and teleport:
-            teleport.checkpoint("document_state", {"text": content, "step": step, "ts": time.time()})
-        print(f"[Notepad] Document updated: {len(content)} characters. State checkpointed.", flush=True)
+
+        counter += 1
+        line = f"Simulated Remote Keystroke Entry #{counter:04d} at {time.strftime('%H:%M:%S')}\n"
+        text += line
+        save_doc(text, cursor_index=f"{counter}.0")
+        if sdk_active:
+            teleport.checkpoint("document", {"text": text, "cursor": f"{counter}.0"})
+
+        print(f"[Notepad] Document updated: {len(text)} characters (line {counter})", flush=True)
         if os.environ.get("RUN_ONCE") == "1":
             break
         time.sleep(1.0)
 
 
 def main() -> None:
-    print("[Notepad] Initializing Collaborative Scratchpad...", flush=True)
+    print("[Notepad] Initializing Teleport Interactive Notepad Workload...", flush=True)
 
     sdk_active = False
-    if teleport is not None:
+    try:
+        teleport.init()
+        sdk_active = True
+        print("[Notepad] Teleport SDK connected to agent.", flush=True)
+    except Exception as e:
+        print(f"[Notepad] Standalone execution ({e}).", flush=True)
+
+    text, _ = load_doc()
+    if sdk_active:
+        restored = teleport.restore("document")
+        if isinstance(restored, dict):
+            text = str(restored.get("text", text))
+
+    has_display = True
+    if "--headless" in sys.argv:
+        has_display = False
+    elif sys.platform != "win32" and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        has_display = False
+
+    if has_display:
         try:
-            teleport.init()
-            sdk_active = True
-            print("[Notepad] Teleport SDK connected to agent.", flush=True)
+            run_tkinter(text, sdk_active)
         except Exception as e:
-            print(f"[Notepad] Standalone mode ({e}).", flush=True)
-
-    # Restore from checkpoint if available
-    initial_text = None
-    if sdk_active and teleport:
-        restored = teleport.restore("document_state")
-        if isinstance(restored, dict) and "text" in restored:
-            initial_text = str(restored["text"])
-
-    if not initial_text:
-        initial_text, _ = load_doc()
-
-    save_doc(initial_text)
-
-    # Try Tkinter GUI first; fallback to headless if no DISPLAY
-    use_gui = True
-    if "--headless" in sys.argv or os.environ.get("HEADLESS") == "1":
-        use_gui = False
-
-    if use_gui:
-        try:
-            run_tkinter(initial_text, sdk_active)
-        except Exception as e:
-            print(f"[Notepad] GUI initialization skipped ({e}). Falling back to headless runner.", flush=True)
-            run_headless(initial_text, sdk_active)
+            print(
+                f"[Notepad] Tkinter initialization failed ({e}), falling back to headless runner.",
+                flush=True,
+            )
+            run_headless_simulation(text, sdk_active)
     else:
-        run_headless(initial_text, sdk_active)
+        run_headless_simulation(text, sdk_active)
 
 
 if __name__ == "__main__":

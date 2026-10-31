@@ -45,6 +45,37 @@ export function DashboardPage() {
       {/* Simulated Demo Control Panel & Fault Injector */}
       <DemoControlPanel />
 
+      {/* Split-Brain Guard Active Banner (if authority conflict detected) */}
+      {state.authorityConflict && (
+        <div
+          data-testid="authority-conflict-banner"
+          className="rounded-xl border border-rose-300 bg-rose-50/95 p-4 shadow-sm dark:border-rose-800 dark:bg-rose-950/50"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-600 text-white shadow-xs">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                  SPLIT-BRAIN GUARD ACTIVE (Authority Conflict Resolved)
+                </span>
+                <span className="font-mono text-rose-950 dark:text-rose-200">
+                  Workload: {state.authorityConflict.workloadId}
+                </span>
+              </div>
+              <p className="mt-1 text-rose-900/90 dark:text-rose-200/90">
+                Local epoch {state.authorityConflict.localEpoch} vs Remote epoch {state.authorityConflict.remoteEpoch}.
+                Winner: <span className="font-bold">{state.authorityConflict.winner}</span> | Stopped: <span className="font-bold">{state.authorityConflict.stopped}</span>.
+                Reason: {state.authorityConflict.reason}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Orchestrator Recommendation Alert Banner (if any) */}
       {rec && (
         <div className="rounded-xl border border-amber-300/80 bg-amber-50/90 p-4 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/40">

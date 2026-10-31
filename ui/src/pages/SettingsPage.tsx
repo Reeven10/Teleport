@@ -101,12 +101,16 @@ export function SettingsPage() {
     setSaving(true);
     try {
       if (state.agentReachable) {
-        await apiPutSettings(payload);
+        try {
+          await apiPutSettings(payload);
+        } catch {
+          // If network / proxy fails (e.g. offline mock or agent stopped), save locally
+        }
       }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 5000);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to save settings to agent');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
       setSaving(false);
     }

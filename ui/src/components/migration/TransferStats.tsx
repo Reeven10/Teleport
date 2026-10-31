@@ -1,4 +1,4 @@
-import type { LinkType } from '@contract';
+import type { LinkType, MigrationMetrics } from '@contract';
 import { formatBytes, formatDuration, formatLinkType } from '../../utils/formatters.ts';
 
 interface TransferStatsProps {
@@ -8,6 +8,7 @@ interface TransferStatsProps {
   interruptionMs?: number | null;
   estInterruptionMs?: number;
   speedMbps?: number;
+  metrics?: MigrationMetrics;
 }
 
 export function TransferStats({
@@ -17,10 +18,12 @@ export function TransferStats({
   interruptionMs,
   estInterruptionMs = 150,
   speedMbps = 85.0,
+  metrics,
 }: TransferStatsProps) {
+  const effectiveSpeed = metrics?.throughputMbps ?? speedMbps;
   const pct = bytesTotal > 0 ? Math.min(100, Math.round((bytesDone / bytesTotal) * 100)) : 0;
   const remainingBytes = Math.max(0, bytesTotal - bytesDone);
-  const remainingSec = speedMbps > 0 ? (remainingBytes * 8) / (speedMbps * 1024 * 1024) : 0;
+  const remainingSec = effectiveSpeed > 0 ? (remainingBytes * 8) / (effectiveSpeed * 1024 * 1024) : 0;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
@@ -56,10 +59,12 @@ export function TransferStats({
             </span>
           </div>
           <p className="mt-1 font-mono text-lg font-bold text-indigo-600 dark:text-indigo-400">
-            {speedMbps.toFixed(1)} MB/s
+            {effectiveSpeed.toFixed(1)} Mbps
           </p>
           <span className="mt-1 block text-[11px] text-slate-400">
-            Estimated remaining: {formatDuration(remainingSec)}
+            {metrics
+              ? `Duration: ${metrics.durationMs}ms | Skipped: ${formatBytes(metrics.bytesSkipped)}`
+              : `Estimated remaining: ${formatDuration(remainingSec)}`}
           </span>
         </div>
 

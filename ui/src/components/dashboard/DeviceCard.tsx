@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { DeviceInfo, Stats } from '@contract';
 import type { MetricHistoryPoint } from '../../store/types.ts';
 import {
@@ -17,7 +18,7 @@ interface DeviceCardProps {
   isSelf?: boolean;
 }
 
-export function DeviceCard({ device, stats, history = [], roleTitle, isSelf = false }: DeviceCardProps) {
+export const DeviceCard = memo(function DeviceCard({ device, stats, history = [], roleTitle, isSelf = false }: DeviceCardProps) {
   const isOnline = stats?.online ?? false;
   const isSimulated = device?.simulated || stats?.simulated;
 
@@ -261,4 +262,4 @@ export function DeviceCard({ device, stats, history = [], roleTitle, isSelf = fa
       </div>
     </div>
   );
-}
+});

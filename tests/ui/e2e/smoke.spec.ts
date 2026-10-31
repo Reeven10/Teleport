@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test.describe('Teleport Dashboard & Migration Scenarios', () => {
   test('dashboard loads live device stats on mock data', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?mock=1');
 
     // 1. Verify Shell and Title
     await expect(page.getByText('Teleport', { exact: true })).toBeVisible();
@@ -138,7 +138,7 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
   test('scenario 5: history page displays devices, migrations, and post-mortem replay', async ({
     page,
   }) => {
-    await page.goto('/history');
+    await page.goto('/history?mock=1');
 
     // 1. Verify History Header
     await expect(page.getByText('Migration & Audit History')).toBeVisible();

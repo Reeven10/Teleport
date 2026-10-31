@@ -7,6 +7,7 @@ import type {
   Stats,
   Trigger,
   WorkloadManifest,
+  WorkloadRun,
 } from '@contract';
 import type { WorkloadItem } from './store/types.ts';
 
@@ -105,6 +106,32 @@ export function connectEvents(
   };
 }
 
+export interface HealthResponse {
+  ok: boolean;
+  deviceId: string;
+  name: string;
+  port: number;
+  simProfile?: string;
+  agentVersion: string;
+  ts: number;
+}
+
+export async function apiFetchHealth(): Promise<HealthResponse> {
+  return getJson<HealthResponse>('/api/health');
+}
+
+export async function apiFetchMigrations(): Promise<MigrationStatus[]> {
+  return getJson<MigrationStatus[]>('/api/migrations');
+}
+
+export async function apiFetchWorkloadRuns(): Promise<WorkloadRun[]> {
+  return getJson<WorkloadRun[]>('/api/workloads/runs');
+}
+
+export async function apiFetchRemoteSessions(): Promise<RemoteSession[]> {
+  return getJson<RemoteSession[]>('/api/remote/sessions');
+}
+
 export async function apiFetchDevices(): Promise<DeviceInfo[]> {
   const data = await getJson<DeviceInfo[] | { devices: DeviceInfo[] }>('/api/devices');
   return Array.isArray(data) ? data : data.devices ?? [];
@@ -179,20 +206,43 @@ export interface SettingsPrefs {
   remoteConsent?: 'prompt' | 'auto_allow' | 'deny_all';
 }
 
-export async function apiGetHistoryDevices(): Promise<DeviceInfo[]> {
-  return getJson<DeviceInfo[]>('/api/history/devices');
+export interface DeviceHistorySummary {
+  id: string;
+  firstSeen: number;
+  lastSeen: number;
+  device: DeviceInfo;
+  linkTypes: string[];
+  migrationCount: number;
 }
 
-export async function apiGetHistoryMigrations(): Promise<MigrationStatus[]> {
-  return getJson<MigrationStatus[]>('/api/history/migrations');
+export async function apiGetHistoryDevices(): Promise<DeviceHistorySummary[]> {
+  const data = await getJson<Array<DeviceHistorySummary | DeviceInfo>>('/api/history/devices');
+  return data.map((d) => {
+    if ('device' in d && d.device) {
+      return d as DeviceHistorySummary;
+    }
+    const dev = d as DeviceInfo;
+    return {
+      id: dev.id,
+      firstSeen: Date.now() - 3600000,
+      lastSeen: Date.now(),
+      device: dev,
+      linkTypes: dev.addrs?.map((a) => a.link) ?? ['cable'],
+      migrationCount: 0,
+    };
+  });
+}
+
+export async function apiGetHistoryMigrations(limit = 50, offset = 0): Promise<MigrationStatus[]> {
+  return getJson<MigrationStatus[]>(`/api/history/migrations?limit=${limit}&offset=${offset}`);
 }
 
 export async function apiGetHistoryMigration(id: string): Promise<MigrationStatus> {
   return getJson<MigrationStatus>(`/api/history/migrations/${id}`);
 }
 
-export async function apiGetHistoryDecisions(): Promise<DecisionLog[]> {
-  return getJson<DecisionLog[]>('/api/history/decisions');
+export async function apiGetHistoryDecisions(limit = 100, offset = 0): Promise<DecisionLog[]> {
+  return getJson<DecisionLog[]>(`/api/history/decisions?limit=${limit}&offset=${offset}`);
 }
 
 export async function apiGetSettings(): Promise<SettingsPrefs> {

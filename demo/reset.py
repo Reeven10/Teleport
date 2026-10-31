@@ -72,10 +72,10 @@ def kill_ports(ports: list[int]) -> None:
             try:
                 out = subprocess.check_output(["lsof", f"-ti:{port}"], stderr=subprocess.DEVNULL, text=True)
                 for pid_str in out.strip().splitlines():
-                    pid = int(pid_str.strip())
-                    if pid != os.getpid():
-                        print_info(f"Terminating Unix process {pid} on port {port}")
-                        os.kill(pid, 9)
+                    unix_pid = int(pid_str.strip())
+                    if unix_pid != os.getpid():
+                        print_info(f"Terminating Unix process {unix_pid} on port {port}")
+                        os.kill(unix_pid, 9)
             except Exception:
                 pass
 

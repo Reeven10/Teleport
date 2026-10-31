@@ -92,9 +92,9 @@ export function DeviceHistoryList({
                       <span className="font-medium">{dev.gpu}</span>
                     </div>
                   )}
-                  <div>
-                    <span className="text-slate-400">Seen: </span>
-                    <span>{formatTime(item.lastSeen)}</span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-0.5">
+                    <span>First: {formatTime(item.firstSeen)}</span>
+                    <span>Last: {formatTime(item.lastSeen)}</span>
                   </div>
                 </div>
               </div>
