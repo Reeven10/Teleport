@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent.teleport.feasibility.engine import (
+from teleport.feasibility.engine import (
     best_target,
     calculate_estimates,
     evaluate_feasibility,
@@ -21,8 +21,8 @@ from contract.contract import (
 
 
 def make_manifest(
-    arch: list[str] = ["x86_64"],
-    os: list[str] = ["linux"],
+    arch: list[str] | None = None,
+    os: list[str] | None = None,
     runtime_name: str = "python",
     runtime_version: str = "3.11",
     min_ram_mb: int = 1000,
@@ -32,6 +32,10 @@ def make_manifest(
     libs: list[str] | None = None,
     remote_capable: bool = True,
 ) -> WorkloadManifest:
+    if arch is None:
+        arch = ["x86_64"]
+    if os is None:
+        os = ["linux"]
     return WorkloadManifest(
         id="test-w",
         name="Test Workload",
@@ -346,4 +350,3 @@ class TestBestTarget:
         assert best is not None
         dev, res = best
         assert dev.id == "cand-b"
-

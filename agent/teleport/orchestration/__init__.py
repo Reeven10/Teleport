@@ -1,25 +1,17 @@
-"""Orchestrator (P3). STUB from P1: never recommends. Keep create_orchestrator + Protocol."""
+"""Orchestration module (P3).
+
+Monitors live stats and link quality, evaluates battery trend predictions,
+and publishes recommendations or triggers automated migrations.
+"""
 
 from __future__ import annotations
 
-from contract.contract import Recommendation
-
 from ..core.context import Context
+from .predictor import BatteryPredictor
+from .service import OrchestratorService
+
+__all__ = ["OrchestratorService", "BatteryPredictor", "create_orchestrator"]
 
 
-class StubOrchestrator:
-    def __init__(self, ctx: Context) -> None:
-        self.ctx = ctx
-
-    def recommendations(self) -> list[Recommendation]:
-        return []
-
-    async def startup(self) -> None:
-        pass
-
-    async def shutdown(self) -> None:
-        pass
-
-
-def create_orchestrator(ctx: Context) -> StubOrchestrator:
-    return StubOrchestrator(ctx)
+def create_orchestrator(ctx: Context) -> OrchestratorService:
+    return OrchestratorService(ctx)
