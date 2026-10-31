@@ -73,16 +73,20 @@ def check_architecture(manifest: WorkloadManifest, target: DeviceInfo) -> Reason
             text="Workload architecture requirement or target architecture is unknown.",
         )
 
+    archs = ", ".join(manifest.arch)
     if target.arch in manifest.arch:
         return Reason(
             code="arch.match",
             severity="pass",
-            text=f"Target architecture '{target.arch}' matches supported workload architectures ({', '.join(manifest.arch)}).",
+            text=f"Target architecture '{target.arch}' matches supported workload architectures ({archs}).",
         )
     return Reason(
         code="arch.mismatch",
         severity="block",
-        text=f"Target architecture '{target.arch}' does not match supported workload architectures ({', '.join(manifest.arch)}).",
+        text=(
+            f"Target architecture '{target.arch}' does not match "
+            f"supported workload architectures ({archs})."
+        ),
     )
 
 
@@ -100,16 +104,20 @@ def check_os(manifest: WorkloadManifest, target: DeviceInfo) -> Reason:
             text="Workload OS requirement or target OS is unknown.",
         )
 
+    supported_os = ", ".join(manifest.os)
     if target.os in manifest.os:
         return Reason(
             code="os.match",
             severity="pass",
-            text=f"Target OS '{target.os}' matches supported workload operating systems ({', '.join(manifest.os)}).",
+            text=f"Target OS '{target.os}' matches supported workload operating systems ({supported_os}).",
         )
     return Reason(
         code="os.mismatch",
         severity="block",
-        text=f"Target OS '{target.os}' does not match supported workload operating systems ({', '.join(manifest.os)}).",
+        text=(
+            f"Target OS '{target.os}' does not match "
+            f"supported workload operating systems ({supported_os})."
+        ),
     )
 
 
@@ -207,23 +215,36 @@ def check_ram(
     if stats is not None and hasattr(stats, "memFreeMb") and stats.memFreeMb is not None:
         free_mb = float(stats.memFreeMb)
 
+    needed_str = format_mb(needed_mb)
+    margin_str = format_mb(margin_needed_mb)
+
     if free_mb is None:
         return Reason(
             code="ram.unknown",
             severity="warn",
-            text=f"Target free RAM is unknown (telemetry missing); workload needs {format_mb(needed_mb)} (x1.2 safety margin = {format_mb(margin_needed_mb)}).",
+            text=(
+                f"Target free RAM is unknown (telemetry missing); workload needs "
+                f"{needed_str} (x1.2 safety margin = {margin_str})."
+            ),
         )
 
+    free_str = format_mb(free_mb)
     if free_mb >= margin_needed_mb:
         return Reason(
             code="ram.sufficient",
             severity="pass",
-            text=f"Target has {format_mb(free_mb)} free RAM, the workload needs {format_mb(needed_mb)} (x1.2 safety margin = {format_mb(margin_needed_mb)}).",
+            text=(
+                f"Target has {free_str} free RAM, the workload needs "
+                f"{needed_str} (x1.2 safety margin = {margin_str})."
+            ),
         )
     return Reason(
         code="ram.insufficient",
         severity="block",
-        text=f"Target has {format_mb(free_mb)} free RAM, which is below the workload's required {format_mb(needed_mb)} (x1.2 safety margin = {format_mb(margin_needed_mb)}).",
+        text=(
+            f"Target has {free_str} free RAM, which is below the workload's required "
+            f"{needed_str} (x1.2 safety margin = {margin_str})."
+        ),
     )
 
 
@@ -250,7 +271,10 @@ def check_cpu_cores(manifest: WorkloadManifest, target: DeviceInfo) -> Reason:
     return Reason(
         code="cpu.insufficient",
         severity="block",
-        text=f"Target has {target.cpuCores} CPU cores, which is fewer than required {manifest.minCpuCores} cores.",
+        text=(
+            f"Target has {target.cpuCores} CPU cores, which is fewer than "
+            f"required {manifest.minCpuCores} cores."
+        ),
     )
 
 
@@ -277,23 +301,37 @@ def check_disk(
     elif hasattr(target, "diskFreeMb") and target.diskFreeMb is not None:
         free_mb = float(target.diskFreeMb)
 
+    req_str = format_mb(required_mb)
+    snap_str = format_mb(snapshot_size_mb)
+    base_str = format_mb(needed_base_mb)
+
     if free_mb is None:
         return Reason(
             code="disk.unknown",
             severity="warn",
-            text=f"Target free disk is unknown (telemetry missing); workload requires {format_mb(required_mb)} (snapshot {format_mb(snapshot_size_mb)} x 2 + {format_mb(needed_base_mb)} required).",
+            text=(
+                f"Target free disk is unknown (telemetry missing); workload requires "
+                f"{req_str} (snapshot {snap_str} x 2 + {base_str} required)."
+            ),
         )
 
+    free_str = format_mb(free_mb)
     if free_mb >= required_mb:
         return Reason(
             code="disk.sufficient",
             severity="pass",
-            text=f"Target has {format_mb(free_mb)} free disk, workload requires {format_mb(required_mb)} (snapshot {format_mb(snapshot_size_mb)} x 2 + {format_mb(needed_base_mb)} required).",
+            text=(
+                f"Target has {free_str} free disk, workload requires "
+                f"{req_str} (snapshot {snap_str} x 2 + {base_str} required)."
+            ),
         )
     return Reason(
         code="disk.insufficient",
         severity="block",
-        text=f"Target has {format_mb(free_mb)} free disk, which is below required {format_mb(required_mb)} (snapshot {format_mb(snapshot_size_mb)} x 2 + {format_mb(needed_base_mb)} required).",
+        text=(
+            f"Target has {free_str} free disk, which is below required "
+            f"{req_str} (snapshot {snap_str} x 2 + {base_str} required)."
+        ),
     )
 
 
@@ -439,7 +477,10 @@ def check_link_quality(link: LinkQuality | None) -> Reason:
         return Reason(
             code="link.degraded",
             severity="warn",
-            text=f"Link quality is degraded on {link_type}: {details} ({mbps:.1f} Mbps, {rtt:.1f} ms RTT, {loss:.1f}% loss).",
+            text=(
+                f"Link quality is degraded on {link_type}: {details} "
+                f"({mbps:.1f} Mbps, {rtt:.1f} ms RTT, {loss:.1f}% loss)."
+            ),
         )
 
     return Reason(
@@ -473,4 +514,3 @@ def run_all_checks(
         check_target_online(target, stats=stats),
         check_link_quality(link),
     ]
-

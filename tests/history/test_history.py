@@ -5,13 +5,10 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
-from agent.teleport.core.bus import EventBus
-from agent.teleport.core.context import Context
-from agent.teleport.core.settings import Settings
-from agent.teleport.history.schema import CURRENT_SCHEMA_VERSION, initialize_database
-from agent.teleport.history.store import SqliteHistoryStore
+from teleport.core.context import Context
+from teleport.core.settings import Settings
+from teleport.history.schema import CURRENT_SCHEMA_VERSION, initialize_database
+from teleport.history.store import SqliteHistoryStore
 from contract.contract import (
     Authority,
     AuthorityChangeEvent,
@@ -55,9 +52,7 @@ def make_sample_decision(decision_id: str = "dec-test-1") -> DecisionLog:
         workloadId="w-test",
         trigger="user_command",
         decision="MIGRATE",
-        reasons=[
-            Reason(code="decision.migrate", severity="pass", text="Migration is feasible.")
-        ],
+        reasons=[Reason(code="decision.migrate", severity="pass", text="Migration is feasible.")],
     )
 
 

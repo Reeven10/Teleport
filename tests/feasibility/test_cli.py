@@ -10,7 +10,6 @@ import pytest
 from dev.feasibility.cli import main
 from tests.feasibility.fixtures import (
     ALL_DEVICE_FILES,
-    ALL_LINK_FILES,
     ALL_MANIFEST_FILES,
 )
 
@@ -117,4 +116,3 @@ class TestCliRunner:
         output = buf.getvalue()
         assert "Summary:" in output
         assert "Verdict:" in output
-

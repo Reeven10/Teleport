@@ -122,7 +122,9 @@ def evaluate_feasibility(
         reason_by_prefix[prefix] = r
 
     # 1. Target availability and link blocks strictly require STAY
-    online_block = reason_by_prefix.get("online", Reason(code="", severity="pass", text="")).severity == "block"
+    online_block = (
+        reason_by_prefix.get("online", Reason(code="", severity="pass", text="")).severity == "block"
+    )
     link_block = reason_by_prefix.get("link", Reason(code="", severity="pass", text="")).severity == "block"
 
     decision: Decision
@@ -149,7 +151,8 @@ def evaluate_feasibility(
         # 2. Check hardware / software compatibility
         compat_prefixes = ["arch", "os", "runtime", "libs", "ram", "cpu", "disk", "gpu", "battery"]
         compat_blocks = [
-            r for r in check_reasons
+            r
+            for r in check_reasons
             if r.severity == "block" and any(r.code.startswith(p) for p in compat_prefixes)
         ]
 
@@ -310,4 +313,3 @@ def best_target(
     scored_evaluations.sort(key=lambda x: x[0], reverse=True)
     best = scored_evaluations[0]
     return best[1], best[2]
-

@@ -10,16 +10,15 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
+from typing import Any
 
 from contract.contract import (
     Decision,
     DecisionLog,
     DecisionLoggedEvent,
     DeviceInfo,
-    FeasibilityResult,
     LinkQuality,
     LinkUpdateEvent,
-    MigrationStatus,
     Recommendation,
     RecommendationEvent,
     Stats,
@@ -73,12 +72,8 @@ class OrchestratorService:
     async def startup(self) -> None:
         """Register event bus subscriptions for telemetry and link updates."""
         if hasattr(self.ctx, "bus"):
-            self._unsub_callbacks.append(
-                self.ctx.bus.subscribe(StatsUpdateEvent, self._handle_stats_update)
-            )
-            self._unsub_callbacks.append(
-                self.ctx.bus.subscribe(LinkUpdateEvent, self._handle_link_update)
-            )
+            self._unsub_callbacks.append(self.ctx.bus.subscribe(StatsUpdateEvent, self._handle_stats_update))
+            self._unsub_callbacks.append(self.ctx.bus.subscribe(LinkUpdateEvent, self._handle_link_update))
 
     async def shutdown(self) -> None:
         """Unsubscribe handlers and clear tracking caches."""
@@ -186,11 +181,7 @@ class OrchestratorService:
                 await self._trigger_fired("low_battery", dev_id, ts)
         else:
             # Hysteresis clearing: charging or pct >= threshold
-            if (
-                stats.battery is None
-                or stats.battery.charging
-                or stats.battery.pct >= self.battery_low_pct
-            ):
+            if stats.battery is None or stats.battery.charging or stats.battery.pct >= self.battery_low_pct:
                 self._active_triggers.discard((dev_id, "low_battery"))
 
         # 4. Check CPU_PRESSURE trigger (sustained >= 90% for 20s)
@@ -350,9 +341,7 @@ class OrchestratorService:
         if peers_svc is not None and hasattr(peers_svc, "list_peers"):
             candidates.extend(peers_svc.list_peers())
         elif devices_svc is not None and hasattr(devices_svc, "list_devices"):
-            candidates.extend(
-                [d for d in devices_svc.list_devices() if d.id != source_device.id]
-            )
+            candidates.extend([d for d in devices_svc.list_devices() if d.id != source_device.id])
 
         stats_map: dict[str, Stats] = {}
         links_map: dict[str, LinkQuality] = {}
@@ -367,7 +356,7 @@ class OrchestratorService:
                 if lk is not None:
                     links_map[cand.id] = lk
 
-        is_auto = (self.mode == "auto")
+        is_auto = self.mode == "auto"
 
         for w in workloads:
             # 1. No action while a migration is already running for that workload

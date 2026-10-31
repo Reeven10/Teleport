@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent.teleport.feasibility.checks import (
+from teleport.feasibility.checks import (
     check_architecture,
     check_cpu_cores,
     check_disk,
@@ -17,7 +17,6 @@ from agent.teleport.feasibility.checks import (
     check_target_battery,
     check_target_online,
     compare_versions,
-    format_mb,
     run_all_checks,
 )
 from contract.contract import (
@@ -31,9 +30,7 @@ from contract.contract import (
 )
 from tests.feasibility.fixtures import (
     ALL_DEVICE_FILES,
-    ALL_LINK_FILES,
     ALL_MANIFEST_FILES,
-    ALL_STATS_FILES,
     load_device,
     load_link,
     load_manifest,
@@ -43,8 +40,8 @@ from tests.feasibility.fixtures import (
 
 # Helper builders
 def make_manifest(
-    arch: list[str] = ["x86_64"],
-    os: list[str] = ["linux"],
+    arch: list[str] | None = None,
+    os: list[str] | None = None,
     runtime_name: str = "python",
     runtime_version: str = "3.11",
     min_ram_mb: int = 1000,
@@ -54,6 +51,10 @@ def make_manifest(
     libs: list[str] | None = None,
     remote_capable: bool = True,
 ) -> WorkloadManifest:
+    if arch is None:
+        arch = ["x86_64"]
+    if os is None:
+        os = ["linux"]
     return WorkloadManifest(
         id="test-w",
         name="Test Workload",

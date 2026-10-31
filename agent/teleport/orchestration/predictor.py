@@ -124,4 +124,3 @@ class BatteryPredictor:
             return True
 
         return False
-

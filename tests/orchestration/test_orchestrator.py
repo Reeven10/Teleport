@@ -12,29 +12,22 @@ Tests include:
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-import pytest
-
-from agent.teleport.core.bus import EventBus
-from agent.teleport.core.context import Context
-from agent.teleport.core.settings import Prefs, Settings
-from agent.teleport.orchestration.predictor import BatteryPredictor
-from agent.teleport.orchestration.service import OrchestratorService
+from teleport.core.context import Context
+from teleport.core.settings import Prefs, Settings
+from teleport.orchestration.service import OrchestratorService
 from contract.contract import (
     Authority,
     Battery,
     CheckpointDef,
     DeviceInfo,
     LinkQuality,
-    LinkUpdateEvent,
     MigrationStatus,
     Recommendation,
     RecommendationEvent,
     RuntimeReq,
     Stats,
-    StatsUpdateEvent,
     Trigger,
     WorkloadManifest,
 )
@@ -445,15 +438,42 @@ class TestBatteryPrediction:
         # t=30: 47%
         # t=60: 44%
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=50.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=50.0, charging=False),
+                online=True,
+            )
         )
         clock.advance(30.0)
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=47.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=47.0, charging=False),
+                online=True,
+            )
         )
         clock.advance(30.0)
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=44.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=44.0, charging=False),
+                online=True,
+            )
         )
 
         # At t=60, rate is -0.1%/s, TTE = 440s (~7.3 min) < 15 min -> predicted fires!
@@ -463,7 +483,16 @@ class TestBatteryPrediction:
         # Advance past 120s cooldown and drop below 20%
         clock.advance(250.0)  # t=310s, battery at 19%
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=19.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=19.0, charging=False),
+                online=True,
+            )
         )
 
         assert len(recs) == 2
@@ -476,7 +505,16 @@ class TestBatteryPrediction:
         # Same series but charging=True
         for pct in (50.0, 47.0, 44.0, 40.0):
             await orch.process_stats(
-                Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=pct, charging=True), online=True)
+                Stats(
+                    deviceId="dev-source",
+                    ts=clock.now(),
+                    cpuPct=10.0,
+                    memPct=30.0,
+                    memFreeMb=8000,
+                    diskFreeMb=40000,
+                    battery=Battery(pct=pct, charging=True),
+                    online=True,
+                )
             )
             clock.advance(30.0)
 
@@ -489,7 +527,16 @@ class TestBatteryPrediction:
         # Highly erratic readings: 50 -> 20 -> 55 -> 15 -> 50
         for pct in (50.0, 20.0, 55.0, 15.0, 50.0):
             await orch.process_stats(
-                Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=pct, charging=False), online=True)
+                Stats(
+                    deviceId="dev-source",
+                    ts=clock.now(),
+                    cpuPct=10.0,
+                    memPct=30.0,
+                    memFreeMb=8000,
+                    diskFreeMb=40000,
+                    battery=Battery(pct=pct, charging=False),
+                    online=True,
+                )
             )
             clock.advance(10.0)
 
@@ -504,7 +551,16 @@ class TestCooldownAndActiveMigration:
 
         # t=0: low battery fires
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=18.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=18.0, charging=False),
+                online=True,
+            )
         )
         assert len(recs) == 1
 
@@ -514,7 +570,16 @@ class TestCooldownAndActiveMigration:
         clock.advance(30.0)  # t=30 (within 120s cooldown)
 
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=95.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=18.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=95.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=18.0, charging=False),
+                online=True,
+            )
         )
         assert len(recs) == 1  # Still 1 because cooldown suppressed it
 
@@ -524,7 +589,16 @@ class TestCooldownAndActiveMigration:
         orch._cpu_pressure_start["dev-source"] = clock.now() - 30.0
 
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=95.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=18.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=95.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=18.0, charging=False),
+                online=True,
+            )
         )
         assert len(recs) == 2  # Cooldown expired, fires!
 
@@ -554,7 +628,16 @@ class TestCooldownAndActiveMigration:
 
         # Battery drops to 10%
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=10.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=10.0, charging=False),
+                online=True,
+            )
         )
 
         # Suppressed because migration is actively running
@@ -567,7 +650,16 @@ class TestRecommendVsAutoMode:
         ctx, orch, mig_svc, recs = create_test_env(clock, mode="recommend")
 
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=18.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=18.0, charging=False),
+                online=True,
+            )
         )
 
         assert len(recs) == 1
@@ -579,7 +671,16 @@ class TestRecommendVsAutoMode:
         ctx, orch, mig_svc, recs = create_test_env(clock, mode="auto")
 
         await orch.process_stats(
-            Stats(deviceId="dev-source", ts=clock.now(), cpuPct=10.0, memPct=30.0, memFreeMb=8000, diskFreeMb=40000, battery=Battery(pct=18.0, charging=False), online=True)
+            Stats(
+                deviceId="dev-source",
+                ts=clock.now(),
+                cpuPct=10.0,
+                memPct=30.0,
+                memFreeMb=8000,
+                diskFreeMb=40000,
+                battery=Battery(pct=18.0, charging=False),
+                online=True,
+            )
         )
 
         assert len(recs) == 1
@@ -589,4 +690,3 @@ class TestRecommendVsAutoMode:
         assert workload_id == "w-test-1"
         assert target_id == "dev-peer"
         assert trigger == "low_battery"
-

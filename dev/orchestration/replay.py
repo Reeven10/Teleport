@@ -17,10 +17,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent.teleport.core.bus import EventBus
-from agent.teleport.core.context import Context
-from agent.teleport.core.settings import Prefs, Settings
-from agent.teleport.orchestration.service import OrchestratorService
+from teleport.core.context import Context
+from teleport.core.settings import Prefs, Settings
+from teleport.orchestration.service import OrchestratorService
 from contract.contract import (
     Battery,
     CheckpointDef,
@@ -88,13 +87,13 @@ def generate_falling_battery_series(device_id: str = "dev-source") -> list[Stats
         (30.0, 47.0),
         (60.0, 44.0),
         (90.0, 41.0),
-        (120.0, 38.0),   # TTE = 380s (6.3 min) -> triggers 'predicted'
+        (120.0, 38.0),  # TTE = 380s (6.3 min) -> triggers 'predicted'
         (150.0, 35.0),
         (180.0, 32.0),
         (210.0, 29.0),
-        (245.0, 25.5),   # Cooldown from t=120 expires at t=240
+        (245.0, 25.5),  # Cooldown from t=120 expires at t=240
         (280.0, 22.0),
-        (310.0, 19.0),   # < 20% -> triggers 'low_battery'
+        (310.0, 19.0),  # < 20% -> triggers 'low_battery'
         (340.0, 16.0),
         (360.0, 14.0),
     ]
@@ -218,7 +217,9 @@ async def run_replay(stats_series: list[Stats]) -> list[tuple[float, str, Recomm
     print("\n" + "=" * 90)
     print(" TELEPORT ORCHESTRATOR TELEMETRY REPLAY")
     print("=" * 90)
-    print(f"{'Offset':<10} | {'Battery':<10} | {'Charging':<10} | {'Projected TTE':<16} | {'Trigger Event':<28}")
+    print(
+        f"{'Offset':<10} | {'Battery':<10} | {'Charging':<10} | {'Projected TTE':<16} | {'Trigger Event':<28}"
+    )
     print("-" * 90)
 
     for st in stats_series:
@@ -241,7 +242,9 @@ async def run_replay(stats_series: list[Stats]) -> list[tuple[float, str, Recomm
         bat_pct_str = f"{st.battery.pct:.0f}%" if st.battery else "N/A"
         charging_str = str(st.battery.charging) if st.battery else "N/A"
 
-        print(f"T+{offset:<7.0f}s | {bat_pct_str:<10} | {charging_str:<10} | {tte_str:<16} | {event_desc:<28}")
+        print(
+            f"T+{offset:<7.0f}s | {bat_pct_str:<10} | {charging_str:<10} | {tte_str:<16} | {event_desc:<28}"
+        )
 
     print("-" * 90)
     print(f"Total Recommendations Emitted: {len(captured_events)}")
@@ -292,4 +295,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

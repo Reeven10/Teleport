@@ -6,11 +6,7 @@ Satisfies the FeasibilityEngine Protocol and publishes decision.logged events.
 
 from __future__ import annotations
 
-import uuid
-
 from contract.contract import (
-    DecisionLog,
-    DecisionLoggedEvent,
     DeviceInfo,
     FeasibilityResult,
     LinkQuality,
@@ -39,6 +35,7 @@ from .engine import (
     calculate_estimates,
     evaluate_feasibility,
 )
+from .explain import FeasibilityExplanation, explain
 
 __all__ = [
     "check_architecture",
@@ -58,6 +55,8 @@ __all__ = [
     "calculate_estimates",
     "evaluate_feasibility",
     "best_target",
+    "FeasibilityExplanation",
+    "explain",
     "FeasibilityEngineImpl",
     "create_feasibility_engine",
 ]
@@ -97,18 +96,6 @@ class FeasibilityEngineImpl:
             target_stats=target_stats,
             source_stats=source_stats,
         )
-
-        # Publish decision.logged event to event bus so history store can record it
-        log = DecisionLog(
-            id=f"dec-{uuid.uuid4().hex[:12]}",
-            ts=result.ts,
-            workloadId=manifest.id,
-            trigger="user_command",
-            decision=result.decision,
-            reasons=result.reasons,
-        )
-        if hasattr(self.ctx, "bus"):
-            await self.ctx.bus.publish(DecisionLoggedEvent(log=log))
 
         return result
 

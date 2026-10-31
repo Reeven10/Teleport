@@ -2,7 +2,8 @@
 
 Usage:
     python -m dev.feasibility.cli --manifest m.json --source s.json --target t.json --link l.json
-    python -m dev.feasibility.cli --manifest m.json --source s.json --target t.json --link l.json --stats stats.json
+    python -m dev.feasibility.cli --manifest m.json --source s.json --target t.json \
+        --link l.json --stats stats.json
 """
 
 from __future__ import annotations
@@ -13,12 +14,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent.teleport.feasibility.engine import evaluate_feasibility
+from teleport.feasibility.engine import evaluate_feasibility
 from contract.contract import (
     DeviceInfo,
     FeasibilityResult,
     LinkQuality,
-    Reason,
     Stats,
     WorkloadManifest,
 )
