@@ -6,26 +6,36 @@ decision logs, timeline events, and full history exports.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, HTTPException, Query
 
 from ..core.context import Context
+
+if TYPE_CHECKING:
+    from .store import SqliteHistoryStore
 
 
 def build_history_router(ctx: Context) -> APIRouter:
     """Build the /api/history APIRouter with full query, filtering, and export capabilities."""
     router = APIRouter(prefix="/api/history", tags=["history"])
 
+    def _get_store() -> SqliteHistoryStore:
+        from .store import SqliteHistoryStore
+
+        return cast(SqliteHistoryStore, ctx.history)
+
     @router.get("/devices")
     async def get_devices() -> list[dict[str, Any]]:
         """Return every device ever seen with first/last seen, link types, and migration count."""
-        return await ctx.history.list_device_summaries()
+        store = _get_store()
+        return await store.list_device_summaries()
 
     @router.get("/devices/{device_id}")
     async def get_device(device_id: str) -> dict[str, Any]:
         """Return device history detail with all migrations involving this device for revisit."""
-        dev = await ctx.history.get_device_detail(device_id)
+        store = _get_store()
+        dev = await store.get_device_detail(device_id)
         if not dev:
             raise HTTPException(status_code=404, detail=f"Device {device_id} not found in history")
         return dev
@@ -53,7 +63,8 @@ def build_history_router(ctx: Context) -> APIRouter:
             except ValueError:
                 pass
 
-        return await ctx.history.list_migrations(
+        store = _get_store()
+        return await store.list_migrations(
             device=device,
             workload=workload,
             decision=decision,
@@ -69,7 +80,8 @@ def build_history_router(ctx: Context) -> APIRouter:
         """Return the complete migration record including manifest, timeline,
         metrics, and replay snapshots.
         """
-        record = await ctx.history.get_migration(migration_id)
+        store = _get_store()
+        record = await store.get_migration(migration_id)
         if not record:
             raise HTTPException(
                 status_code=404, detail=f"Migration {migration_id} not found in history"
@@ -83,11 +95,13 @@ def build_history_router(ctx: Context) -> APIRouter:
         workload: str | None = None,
     ) -> list[Any]:
         """Return the decision log with reasons (including remote access and stay decisions)."""
-        return await ctx.history.list_decisions(limit=limit, offset=offset, workload=workload)
+        store = _get_store()
+        return await store.list_decisions(limit=limit, offset=offset, workload=workload)
 
     @router.get("/export")
     async def export_history() -> dict[str, Any]:
         """Return the complete history database as JSON for backup and demo."""
-        return await ctx.history.export_history()
+        store = _get_store()
+        return await store.export_history()
 
     return router

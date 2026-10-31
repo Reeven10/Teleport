@@ -12,7 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from contract.contract import (
     DeviceInfo,
@@ -47,7 +47,7 @@ def load_json_file(path_str: str) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"File not found: '{path_str}' (checked {path})")
     with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        return cast(dict[str, Any], json.load(f))
 
 
 CHECK_NAMES = [

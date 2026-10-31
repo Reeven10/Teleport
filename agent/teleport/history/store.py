@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sqlite3
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from contract.contract import (
     AuthorityChangeEvent,
@@ -27,9 +28,11 @@ from contract.contract import (
 )
 
 from ..core.context import Context
+from .router import build_history_router
 from .schema import CURRENT_SCHEMA_VERSION, initialize_database
 
 MAX_REPLAY_SNAPSHOTS = 100
+log = logging.getLogger("teleport.history")
 
 
 class SqliteHistoryStore:
@@ -49,15 +52,45 @@ class SqliteHistoryStore:
         self._unsub_callbacks: list[Callable[[], None]] = []
         self._last_snapshot_ts: dict[str, float] = {}
 
+        # Mountable FastAPI router for automatic app integration (P3-11)
+        self.router = build_history_router(ctx)
+
     def _get_connection(self) -> sqlite3.Connection:
         if self._conn is None:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(
-                str(self.db_path),
-                check_same_thread=False,
-                timeout=30.0,
-            )
-            initialize_database(self._conn)
+            try:
+                self._conn = sqlite3.connect(
+                    str(self.db_path),
+                    check_same_thread=False,
+                    timeout=30.0,
+                )
+                initialize_database(self._conn)
+            except sqlite3.DatabaseError as exc:
+                log.warning(
+                    "Teleport history database at %s is corrupted (%s); "
+                    "backing up and rebuilding a fresh database.",
+                    self.db_path,
+                    exc,
+                )
+                if self._conn is not None:
+                    try:
+                        self._conn.close()
+                    except Exception:
+                        pass
+                    self._conn = None
+                corrupt_backup = self.db_path.with_name(
+                    f"{self.db_path.name}.corrupted.{int(time.time())}"
+                )
+                try:
+                    self.db_path.rename(corrupt_backup)
+                except Exception:
+                    pass
+                self._conn = sqlite3.connect(
+                    str(self.db_path),
+                    check_same_thread=False,
+                    timeout=30.0,
+                )
+                initialize_database(self._conn)
         return self._conn
 
     async def startup(self) -> None:
@@ -550,7 +583,7 @@ class SqliteHistoryStore:
                     d_row = cursor.fetchone()
                     if d_row:
                         try:
-                            return json.loads(d_row[0])
+                            return cast(dict[str, Any], json.loads(d_row[0]))
                         except Exception:
                             pass
                     return {"id": d_id}

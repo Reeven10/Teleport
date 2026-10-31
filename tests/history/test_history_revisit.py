@@ -5,6 +5,7 @@ REST endpoints, export round-trip, and schema migrations (P3).
 
 from __future__ import annotations
 
+import builtins
 import time
 from pathlib import Path
 
@@ -16,13 +17,16 @@ from contract.contract import (
     Authority,
     AuthorityChangeEvent,
     CheckpointRecord,
+    Decision,
     DecisionLog,
     DeviceInfo,
     DevicePairedEvent,
+    LinkType,
     MigrationStatus,
     MigrationStatusEvent,
     Phase,
     Reason,
+    Trigger,
     WorkloadManifest,
     WorkloadRun,
 )
@@ -37,10 +41,16 @@ class FakeWorkloads:
     def __init__(self, manifests: list[WorkloadManifest]) -> None:
         self._manifests = manifests
 
-    def list(self) -> list[WorkloadManifest]:
+    async def startup(self) -> None:
+        pass
+
+    async def shutdown(self) -> None:
+        pass
+
+    def list(self) -> builtins.list[WorkloadManifest]:
         return self._manifests
 
-    def runs(self) -> list[WorkloadRun]:
+    def runs(self) -> builtins.list[WorkloadRun]:
         return []
 
 
@@ -74,9 +84,9 @@ def make_migration(
     source_id: str = "dev-1",
     target_id: str = "dev-2",
     phase: Phase = "COMPLETED",
-    trigger: str = "low_battery",
-    link: str = "wifi",
-    decision: str = "MIGRATE",
+    trigger: Trigger = "low_battery",
+    link: LinkType = "wifi",
+    decision: Decision | None = "MIGRATE",
     bytes_total: int = 50_000_000,
     bytes_done: int = 50_000_000,
     interruption_ms: int = 120,

@@ -17,6 +17,7 @@ from contract.contract import (
     DecisionLog,
     DecisionLoggedEvent,
     DeviceInfo,
+    DeviceLostEvent,
     LinkQuality,
     LinkUpdateEvent,
     Recommendation,
@@ -74,6 +75,7 @@ class OrchestratorService:
         if hasattr(self.ctx, "bus"):
             self._unsub_callbacks.append(self.ctx.bus.subscribe(StatsUpdateEvent, self._handle_stats_update))
             self._unsub_callbacks.append(self.ctx.bus.subscribe(LinkUpdateEvent, self._handle_link_update))
+            self._unsub_callbacks.append(self.ctx.bus.subscribe(DeviceLostEvent, self._handle_device_lost))
 
     async def shutdown(self) -> None:
         """Unsubscribe handlers and clear tracking caches."""
@@ -164,6 +166,12 @@ class OrchestratorService:
                 charging=stats.battery.charging,
             )
 
+        # P3-6: Resource pressure triggers evaluate strictly for the local device.
+        # Peers' telemetry is maintained only for ranking potential migration targets.
+        local_id = getattr(self.ctx, "device_id", None)
+        if local_id is not None and dev_id != local_id:
+            return
+
         # 2. Check PREDICTED trigger
         is_pred = self.predictor.is_predicted_trigger(
             device_id=dev_id,
@@ -216,6 +224,15 @@ class OrchestratorService:
             self._mem_pressure_start.pop(dev_id, None)
             self._active_triggers.discard((dev_id, "memory_pressure"))
 
+    async def _handle_device_lost(self, event: DeviceLostEvent) -> None:
+        """Handle sudden loss of a paired peer device (P3-7)."""
+        peer_id = event.deviceId
+        ts = self.now()
+        key: tuple[str, Trigger] = (peer_id, "connectivity_lost")
+        if key not in self._active_triggers:
+            self._active_triggers.add(key)
+            await self._trigger_fired("connectivity_lost", peer_id, ts)
+
     async def _handle_link_update(self, event: LinkUpdateEvent) -> None:
         link = event.link
         await self.process_link(link)
@@ -232,7 +249,7 @@ class OrchestratorService:
             if peer_id not in self._link_down_start:
                 self._link_down_start[peer_id] = ts
             elif (ts - self._link_down_start[peer_id]) >= self.connectivity_window_sec:
-                key = (peer_id, "connectivity_lost")
+                key: tuple[str, Trigger] = (peer_id, "connectivity_lost")
                 if key not in self._active_triggers:
                     self._active_triggers.add(key)
                     # Trigger action for workloads on this device or local device
@@ -350,6 +367,10 @@ class OrchestratorService:
             candidates.extend(peers_svc.list_peers())
         elif devices_svc is not None and hasattr(devices_svc, "list_devices"):
             candidates.extend([d for d in devices_svc.list_devices() if d.id != source_device.id])
+
+        # P3-7: If connectivity was lost to a specific peer, never target the lost peer!
+        if trigger == "connectivity_lost":
+            candidates = [c for c in candidates if c.id != device_id]
 
         stats_map: dict[str, Stats] = {}
         links_map: dict[str, LinkQuality] = {}

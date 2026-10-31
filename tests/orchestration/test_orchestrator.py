@@ -12,6 +12,7 @@ Tests include:
 
 from __future__ import annotations
 
+import builtins
 from typing import Any
 
 from contract.contract import (
@@ -48,10 +49,10 @@ class MockWorkloads:
     def __init__(self, manifests: list[WorkloadManifest]) -> None:
         self._manifests = manifests
 
-    def list(self) -> list[WorkloadManifest]:
+    def list(self) -> builtins.list[WorkloadManifest]:
         return self._manifests
 
-    def runs(self) -> list[Any]:
+    def runs(self) -> builtins.list[Any]:
         return []
 
 

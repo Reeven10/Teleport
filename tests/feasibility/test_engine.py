@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from contract.contract import (
@@ -170,9 +172,9 @@ class TestDecisionPaths:
     def test_remote_access_for_each_blocking_check(
         self,
         block_type: str,
-        manifest_kwargs: dict,
-        target_kwargs: dict,
-        stats_kwargs: dict,
+        manifest_kwargs: dict[str, Any],
+        target_kwargs: dict[str, Any],
+        stats_kwargs: dict[str, Any],
     ) -> None:
         m = make_manifest(remote_capable=True, **manifest_kwargs)
         s = make_device(id="source-1")

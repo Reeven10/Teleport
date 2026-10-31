@@ -42,11 +42,7 @@ def explain(result: FeasibilityResult) -> FeasibilityExplanation:
     2. Warnings (advisories that do not prevent execution)
     3. Passes (satisfied requirements)
     """
-    decision_val = (
-        result.decision.value
-        if hasattr(result.decision, "value")
-        else str(result.decision)
-    )
+    decision_val = str(result.decision)
 
     blocks: list[Reason] = []
     warnings: list[Reason] = []
