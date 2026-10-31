@@ -178,6 +178,39 @@ def get_installed_libraries() -> list[str]:
     return _libs_cache
 
 
+# Known virtual, container, and VPN adapter patterns to exclude from advertised addresses
+VIRTUAL_IFACE_PATTERNS = (
+    "vethernet",
+    "veth",
+    "docker",
+    "br-",
+    "cni",
+    "flannel",
+    "virbr",
+    "vmnet",
+    "vboxnet",
+    "wsl",
+    "hyper-v",
+    "tailscale",
+    "zerotier",
+    "wireguard",
+    "wg",
+    "tun",
+    "tap",
+)
+
+
+def is_virtual_or_dummy_interface(iface_name: str, ip_str: str) -> bool:
+    """Return True if interface is a local container/VM bridge or virtual adapter."""
+    clean = iface_name.lower().strip()
+    if any(k in clean for k in VIRTUAL_IFACE_PATTERNS):
+        return True
+    # Ignore APIPA 169.254 unless on an actual physical ethernet / USB tethering adapter
+    if ip_str.startswith("169.254.") and not any(k in clean for k in ("eth", "en", "usb", "rndis", "cdc")):
+        return True
+    return False
+
+
 def guess_link_type(iface_name: str, ip_str: str) -> LinkType:
     name = iface_name.lower().strip()
     if (
@@ -212,7 +245,7 @@ def guess_link_type(iface_name: str, ip_str: str) -> LinkType:
 
 
 def get_network_addresses(port: int, bind_host: str = "127.0.0.1") -> list[DeviceAddr]:
-    """Enumerate network addresses according to bind_host, guessing link types."""
+    """Enumerate network addresses according to bind_host, filtering out virtual and dummy adapters."""
     # If bound strictly to loopback, only advertise loopback address
     if bind_host in ("127.0.0.1", "localhost", "::1"):
         return [DeviceAddr(addr=f"127.0.0.1:{port}", link="loopback")]
@@ -227,17 +260,24 @@ def get_network_addresses(port: int, bind_host: str = "127.0.0.1") -> list[Devic
         for iface, addr_list in if_addrs.items():
             stats = if_stats.get(iface)
             is_up = stats.isup if stats else True
+            # Skip interface if explicitly down
+            if not is_up:
+                continue
+
             for a in addr_list:
                 if a.family == socket.AF_INET:
                     ip = a.address
                     if ip == "0.0.0.0":
+                        continue
+                    # Filter out internal virtual bridge interfaces (WSL, Hyper-V, Docker)
+                    if is_virtual_or_dummy_interface(iface, ip):
                         continue
                     # If bound to a specific non-wildcard IP, only advertise that IP or loopback
                     if bind_host not in ("0.0.0.0", "::") and ip != bind_host and not ip.startswith("127."):
                         continue
                     link = guess_link_type(iface, ip)
                     formatted = f"{ip}:{port}"
-                    if formatted not in seen and (is_up or link == "loopback"):
+                    if formatted not in seen:
                         seen.add(formatted)
                         addrs.append(DeviceAddr(addr=formatted, link=link))
     except Exception:

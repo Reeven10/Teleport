@@ -7,15 +7,6 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-from contract.contract import LinkQuality
-
-
-class ExtendedLinkQuality(LinkQuality):
-    """Extended LinkQuality supporting online state and simulation indicator."""
-
-    online: bool = True
-    simulated: bool | None = None
-
 
 @dataclass
 class FaultInjector:

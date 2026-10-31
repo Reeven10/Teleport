@@ -291,7 +291,10 @@ class PeerLinkService(PeerLink):
     async def pair(self, addr: str, pin: str) -> DeviceInfo:
         """Initiate pairing with a remote device at addr using short-code PIN."""
         if not (":" in addr or addr.startswith(("http://", "https://", "ws://", "wss://"))):
-            raise NotImplementedError(f"Address format {addr!r} is not supported; host:port or URL required")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid address format '{addr}'. Expected 'host:port' (e.g. 192.168.1.50:8765)",
+            )
 
         local = self.ctx.devices.local_info()
         remote_device = await self.pairing.initiate_remote_pair(addr, pin, local)

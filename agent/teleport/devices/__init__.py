@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from contract.contract import DeviceService
 
-from .service import DeviceServiceImpl, ExtendedStats
+from .service import DeviceServiceImpl
 
 if TYPE_CHECKING:
     from ..core.context import Context
@@ -21,4 +21,4 @@ def create_device_service(ctx: Context) -> DeviceService:
     return DeviceServiceImpl(ctx)
 
 
-__all__ = ["DeviceService", "DeviceServiceImpl", "ExtendedStats", "create_device_service"]
+__all__ = ["DeviceService", "DeviceServiceImpl", "create_device_service"]

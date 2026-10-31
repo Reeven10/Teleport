@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from contract.contract import (
     DeviceLostEvent,
+    LinkQuality,
     LinkType,
     LinkUpdateEvent,
     MigAbort,
@@ -31,7 +32,7 @@ from contract.contract import (
 )
 from teleport.security import ISecureSession, SecureSession
 
-from .quality import ExtendedLinkQuality, FaultInjector
+from .quality import FaultInjector
 
 if TYPE_CHECKING:
     from ..core.context import Context
@@ -128,19 +129,16 @@ class PeerConnection:
         self._rx_task = asyncio.create_task(self._rx_loop())
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-    def quality(self) -> ExtendedLinkQuality:
-        """Get current LinkQuality snapshot labeled with simulation state."""
-        simulated = True if self.fault_injector.is_active else None
+    def quality(self) -> LinkQuality:
+        """Get current LinkQuality snapshot."""
         effective_mbps = self.fault_injector.apply_bandwidth_cap(self.mbps)
-        return ExtendedLinkQuality(
+        return LinkQuality(
             peerId=self.peer_id,
             link=self.link_type,
             rttMs=round(self.rtt_ms, 2),
             mbps=round(effective_mbps, 1),
             lossPct=round(self.loss_pct, 2),
             ts=time.time(),
-            online=self.online,
-            simulated=simulated,
         )
 
     def set_faults(
