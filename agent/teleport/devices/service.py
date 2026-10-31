@@ -23,12 +23,6 @@ if TYPE_CHECKING:
 log = logging.getLogger("teleport.devices")
 
 
-class ExtendedStats(Stats):
-    """Extended Stats with explicit staleness indicator."""
-
-    stale: bool = False
-
-
 class DeviceServiceImpl(DeviceService):
     """Production DeviceService satisfying contract/contract.py Protocol."""
 
@@ -69,19 +63,15 @@ class DeviceServiceImpl(DeviceService):
         return self.registry.list_devices(local_id=self.ctx.device_id)
 
     def latest_stats(self, device_id: str) -> Stats | None:
-        """Latest stats reported for device_id (local or peer). Marked stale if > 5.0 seconds old."""
+        """Latest stats reported for device_id (local or peer). Marked online=False if > 5.0 seconds old."""
         stats = self._latest_stats.get(device_id)
         if not stats:
             return None
         now = time.time()
         is_stale = (now - stats.ts) > 5.0
-        dump = stats.model_dump()
         if is_stale:
-            dump["online"] = False
-            dump["stale"] = True
-            return ExtendedStats(**dump)
-        dump["stale"] = False
-        return ExtendedStats(**dump)
+            return stats.model_copy(update={"online": False})
+        return stats
 
     def set_override(self, device_id: str, partial_stats: dict[str, Any] | None) -> None:
         """Dev simulator: merge partial Stats fields over real ones; None clears."""
@@ -151,9 +141,20 @@ class DeviceServiceImpl(DeviceService):
         return await asyncio.to_thread(self._sample_sync)
 
     async def _loop(self) -> None:
-        """Publish Stats on ctx.bus every 1 second."""
+        """Publish Stats on ctx.bus every 1 second, detecting sleep/wake gaps."""
+        last_tick = time.time()
         while True:
             try:
+                now = time.time()
+                # Detect sleep/wake gap: clock jumped by > 3s during a 1s sleep
+                if (now - last_tick) > 3.0:
+                    log.info(
+                        "System wake detected (time jump %.1fs). Refreshing device capabilities.",
+                        now - last_tick,
+                    )
+                    self.local_info(force_refresh=True)
+
+                last_tick = now
                 stats = await self._sample_async()
                 self._latest_stats[self.ctx.device_id] = stats
                 await self.ctx.bus.publish(StatsUpdateEvent(stats=stats))

@@ -22,7 +22,6 @@ from contract.contract import (
     PeerPong,
     PeerStats,
 )
-from teleport.transport.quality import ExtendedLinkQuality
 
 if TYPE_CHECKING:
     from teleport.core import Context
@@ -65,15 +64,13 @@ class InMemoryPeerLink(PeerLink):
         self._connected = False
         peer_id = self.counterpart.ctx.device_id if self.counterpart else "unknown"
         asyncio.create_task(self.ctx.bus.publish(DeviceLostEvent(deviceId=peer_id)))
-        dead_link = ExtendedLinkQuality(
+        dead_link = LinkQuality(
             peerId=peer_id,
             link=self.link_type,
             rttMs=999.0,
             mbps=0.0,
             lossPct=100.0,
             ts=time.time(),
-            online=False,
-            simulated=True if (self.delay_ms > 0 or self.drop_rate > 0) else None,
         )
         asyncio.create_task(self.ctx.bus.publish(LinkUpdateEvent(link=dead_link)))
 
@@ -165,16 +162,13 @@ class InMemoryPeerLink(PeerLink):
     def link_quality(self, device_id: str) -> LinkQuality | None:
         if not self.counterpart or self.counterpart.ctx.device_id != device_id or self.is_cut:
             return None
-        is_sim = True if (self.delay_ms > 0 or self.drop_rate > 0) else None
-        return ExtendedLinkQuality(
+        return LinkQuality(
             peerId=device_id,
             link=self.link_type,
             rttMs=max(1.0, self.delay_ms * 2),
             mbps=1000.0 if self.link_type == "cable" else 150.0,
             lossPct=self.drop_rate * 100.0,
             ts=time.time(),
-            online=True,
-            simulated=is_sim,
         )
 
     def list_peers(self) -> list[DeviceInfo]:

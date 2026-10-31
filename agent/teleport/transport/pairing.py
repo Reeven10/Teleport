@@ -5,6 +5,7 @@ Handles 6-digit PIN generation, display, rate limiting, and verification.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import secrets
@@ -110,17 +111,49 @@ class PairingManager:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.post(verify_url, json=payload)
+        except httpx.ConnectTimeout as e:
+            raise HTTPException(
+                status_code=504,
+                detail=(
+                    f"Connection to '{addr}' timed out. "
+                    "Verify that the device is online and port is allowed through firewalls."
+                ),
+            ) from e
+        except (httpx.ConnectError, ConnectionRefusedError) as e:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Cannot reach device at '{addr}' (connection refused). "
+                    "Check that Teleport agent is running on the other device."
+                ),
+            ) from e
         except Exception as e:
             raise HTTPException(
-                status_code=502, detail=f"Failed to connect to peer at {verify_url}: {e}"
+                status_code=502,
+                detail=f"Failed to connect to device at '{addr}': {e}",
             ) from e
 
         if resp.status_code == 429:
-            raise HTTPException(status_code=429, detail="Pairing rejected: peer is rate limited.")
+            remote_err = (
+                "Pairing rate limited: too many failed attempts. Generate a new PIN on the target device."
+            )
+            with contextlib.suppress(Exception):
+                remote_err = resp.json().get("detail", remote_err)
+            raise HTTPException(status_code=429, detail=remote_err)
+
         if resp.status_code in (401, 403):
-            raise HTTPException(status_code=401, detail="Pairing rejected: invalid PIN.")
+            remote_err = (
+                "Pairing rejected: invalid PIN. Check the 6-digit PIN displayed on the target device."
+            )
+            with contextlib.suppress(Exception):
+                remote_err = resp.json().get("detail", remote_err)
+            raise HTTPException(status_code=401, detail=remote_err)
+
         if resp.status_code != 200:
-            raise HTTPException(status_code=resp.status_code, detail=f"Pairing failed: {resp.text}")
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=f"Pairing request failed (HTTP {resp.status_code}): {resp.text}",
+            )
 
         data: dict[str, Any] = resp.json()
         if not data.get("ok"):
