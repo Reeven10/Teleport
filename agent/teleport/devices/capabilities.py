@@ -180,6 +180,9 @@ def get_installed_libraries() -> list[str]:
 
 # Known virtual, container, and VPN adapter patterns to exclude from advertised addresses
 VIRTUAL_IFACE_PATTERNS = (
+    "virtualbox",
+    "vmware",
+    "vboxnet",
     "vethernet",
     "veth",
     "docker",
@@ -188,7 +191,6 @@ VIRTUAL_IFACE_PATTERNS = (
     "flannel",
     "virbr",
     "vmnet",
-    "vboxnet",
     "wsl",
     "hyper-v",
     "tailscale",
@@ -211,37 +213,13 @@ def is_virtual_or_dummy_interface(iface_name: str, ip_str: str) -> bool:
     return False
 
 
-def guess_link_type(iface_name: str, ip_str: str) -> LinkType:
-    name = iface_name.lower().strip()
-    if (
-        ip_str.startswith("127.")
-        or ip_str == "::1"
-        or "loopback" in name
-        or name == "lo"
-        or name.startswith("lo0")
-    ):
+def guess_link_type(iface_name: str, ip_str: str, speed_mbps: int = 0) -> LinkType:
+    """Classify link type using unified interface classifier."""
+    if is_virtual_or_dummy_interface(iface_name, ip_str):
         return "loopback"
-    if any(k in name for k in ("wi-fi", "wifi", "wlan", "wireless", "airport")) or name.startswith("wl"):
-        return "wifi"
-    if any(
-        k in name
-        for k in (
-            "eth",
-            "enp",
-            "ethernet",
-            "usb",
-            "rndis",
-            "cdc",
-            "thunderbolt",
-            "lan",
-            "cable",
-            "local area",
-        )
-    ):
-        return "cable"
-    if name.startswith("en"):
-        return "cable"
-    return "cable"
+    from teleport.transport.link_detector import classify_interface
+
+    return classify_interface(iface_name, ip_str, speed_mbps=speed_mbps)
 
 
 def get_network_addresses(port: int, bind_host: str = "127.0.0.1") -> list[DeviceAddr]:

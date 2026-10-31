@@ -51,7 +51,13 @@ def classify_interface(name: str, ip: str, speed_mbps: int = 0) -> LinkType:
     # 3. Point-to-point / Cable address ranges (e.g. 169.254 link-local or USB tethering)
     is_p2p_subnet = any(clean_ip.startswith(prefix) for prefix in POINT_TO_POINT_PREFIXES)
 
-    # 4. Explicit Cable keywords
+    # 4. macOS en0 heuristic: on MacBooks en0 is Wi-Fi unless high-speed gigabit cable or link-local
+    if clean_name == "en0":
+        if speed_mbps >= 1000 or is_p2p_subnet:
+            return "cable"
+        return "wifi"
+
+    # 5. Explicit Cable keywords
     cable_keywords = (
         "eth",
         "enp",
@@ -67,14 +73,8 @@ def classify_interface(name: str, ip: str, speed_mbps: int = 0) -> LinkType:
     )
     has_cable_keyword = any(k in clean_name for k in cable_keywords)
 
-    # macOS en0 heuristic: on MacBooks en0 is Wi-Fi unless high-speed gigabit cable or link-local
-    if clean_name == "en0":
-        if speed_mbps >= 1000 or is_p2p_subnet:
-            return "cable"
-        return "wifi"
-
     # macOS en1, en2, etc. with Thunderbolt/USB/Ethernet hardware
-    if clean_name.startswith("en"):
+    if clean_name.startswith("en") and clean_name != "en0":
         return "cable"
 
     if has_cable_keyword or is_p2p_subnet or speed_mbps >= 1000:

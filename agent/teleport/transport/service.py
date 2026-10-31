@@ -11,6 +11,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any
 
+import psutil
 import websockets
 from fastapi import APIRouter, HTTPException, Request, WebSocket
 from pydantic import BaseModel
@@ -31,6 +32,7 @@ from contract.contract import (
     StatsUpdateEvent,
 )
 from teleport.security import DeviceIdentity, SecureSession, SecurityError
+from teleport.security.manifest import sign_manifest, verify_manifest
 
 from .connection import ClientWSAdapter, PeerConnection, StarletteWSAdapter
 from .link_detector import classify_interface
@@ -41,6 +43,19 @@ if TYPE_CHECKING:
     from ..core.context import Context
 
 log = logging.getLogger("teleport.transport")
+
+
+def _is_local_client(client_host: str) -> bool:
+    """Return True if caller is on localhost or matches an IP owned by this machine."""
+    if client_host in ("127.0.0.1", "::1", "localhost", "testclient"):
+        return True
+    try:
+        for addrs in psutil.net_if_addrs().values():
+            if any(a.address == client_host for a in addrs):
+                return True
+    except Exception:
+        pass
+    return False
 
 
 class PairVerifyPayload(BaseModel):
@@ -85,10 +100,19 @@ class PeerLinkService(PeerLink):
         self._forced_link: LinkType | None = self._initial_forced_link()
         self._default_faults: FaultInjector = FaultInjector()
         self._peer_faults: dict[str, FaultInjector] = {}
+        self._peer_loss: dict[str, float] = {}
         self._unsub_stats: Any = None
 
         self.router = APIRouter()
         self._setup_routes()
+
+    def sign_manifest(self, payload: bytes) -> str:
+        """Sign workload manifest bytes using local device's Ed25519 identity key."""
+        return sign_manifest(payload, self.pairing.identity)
+
+    def verify_manifest(self, device_id: str, payload: bytes, signature: str) -> bool:
+        """Verify workload manifest signature against trusted public key of source device_id."""
+        return verify_manifest(payload, signature, device_id, self.pairing.peer_keys)
 
     def _initial_forced_link(self) -> LinkType | None:
         forced = os.environ.get("TELEPORT_FORCE_LINK") or os.environ.get("TELEPORT_LINK")
@@ -147,16 +171,16 @@ class PeerLinkService(PeerLink):
                 "name": local.name,
                 "addrs": [a.model_dump() for a in local.addrs],
             }
-            # Restrict PIN visibility strictly to local caller
-            if client_host in ("127.0.0.1", "::1", "localhost", "testclient"):
+            # Restrict PIN visibility strictly to local caller (localhost or machine's own IPs)
+            if _is_local_client(client_host):
                 data["pin"] = self.pairing.pin
             return data
 
         @self.router.post("/api/pair/pin")
         async def rotate_pin(request: Request) -> dict[str, Any]:
             client_host = request.client.host if request.client else "127.0.0.1"
-            if client_host not in ("127.0.0.1", "::1", "localhost", "testclient"):
-                raise HTTPException(status_code=403, detail="PIN rotation permitted only from localhost")
+            if not _is_local_client(client_host):
+                raise HTTPException(status_code=403, detail="PIN rotation permitted only from local device")
             new_pin = self.pairing.generate_pin()
             return {"pin": new_pin, "deviceId": self.ctx.device_id}
 
@@ -258,11 +282,28 @@ class PeerLinkService(PeerLink):
                 else:
                     peer_id = client_msg.get("device", {}).get("id") or "peer"
 
-                # Determine link type for this connection
-                client_host = ws.client.host if ws.client else "127.0.0.1"
-                link_type = classify_interface(name="peer-in", ip=client_host)
+                # Determine link type for this connection from local listening interface
+                server_host = ws.scope.get("server", [None])[0] or "127.0.0.1"
+                iface_name = "peer-in"
+                speed_mbps = 0
+                if server_host in ("127.0.0.1", "::1", "localhost"):
+                    iface_name = "loopback"
+                else:
+                    try:
+                        for name, addrs in psutil.net_if_addrs().items():
+                            if any(a.address == server_host for a in addrs):
+                                iface_name = name
+                                stats_map = psutil.net_if_stats()
+                                speed_mbps = stats_map[name].speed if name in stats_map else 0
+                                break
+                    except Exception:
+                        pass
+
+                link_type = classify_interface(name=iface_name, ip=server_host, speed_mbps=speed_mbps)
 
                 faults = self.get_fault_injector(peer_id)
+                prior_loss = self._peer_loss.get(peer_id, 0.0)
+                prior_online = prior_loss < 80.0
                 conn = PeerConnection(
                     peer_id=peer_id,
                     adapter=adapter,
@@ -272,6 +313,8 @@ class PeerLinkService(PeerLink):
                     on_disconnect=self._handle_disconnect,
                     session=session,
                     fault_injector=faults,
+                    initial_loss=prior_loss,
+                    initial_online=prior_online,
                 )
                 self._connections[peer_id] = conn
                 conn.start()
@@ -348,6 +391,16 @@ class PeerLinkService(PeerLink):
                 host_port = host_port[5:]
             host_port = host_port.rstrip("/").removesuffix("/peer")
 
+            # Never dial own adapter when connecting to a remote peer
+            ip_only = host_port.split(":")[0]
+            if (
+                device_id != self.ctx.device_id
+                and ip_only not in ("127.0.0.1", "localhost", "::1")
+                and _is_local_client(ip_only)
+            ):
+                log.debug("Skipping candidate %s because IP belongs to local machine", cand.addr)
+                continue
+
             ws_url = f"ws://{host_port}/peer"
             log.info("Attempting connection to peer %s at %s (%s)", device_id, ws_url, cand.link)
 
@@ -388,6 +441,8 @@ class PeerLinkService(PeerLink):
                     session.establish(peer_eph_bytes, peer_id_bytes, is_initiator=True)
 
                 faults = self.get_fault_injector(device_id)
+                prior_loss = self._peer_loss.get(device_id, 0.0)
+                prior_online = prior_loss < 80.0
                 conn = PeerConnection(
                     peer_id=device_id,
                     adapter=adapter,
@@ -397,6 +452,8 @@ class PeerLinkService(PeerLink):
                     on_disconnect=self._handle_disconnect,
                     session=session,
                     fault_injector=faults,
+                    initial_loss=prior_loss,
+                    initial_online=prior_online,
                 )
                 self._connections[device_id] = conn
                 conn.start()
@@ -404,7 +461,7 @@ class PeerLinkService(PeerLink):
                 # Check if failover occurred
                 prev_link = self._previous_link_types.get(device_id)
                 self._previous_link_types[device_id] = cand.link
-                if prev_link and prev_link != cand.link:
+                if prev_link and prev_link != cand.link and conn.online:
                     log.info("Link failover for peer %s: %s -> %s", device_id, prev_link, cand.link)
                     await self.ctx.bus.publish(LinkUpdateEvent(link=conn.quality()))
 
@@ -461,7 +518,9 @@ class PeerLinkService(PeerLink):
 
     async def _handle_disconnect(self, peer_id: str) -> None:
         """Triggered when connection to peer_id drops. Attempts reconnect with backoff."""
-        self._connections.pop(peer_id, None)
+        if old_conn := self._connections.pop(peer_id, None):
+            self._peer_loss[peer_id] = old_conn.loss_pct
+
         if peer_id in self._reconnecting:
             return
 
@@ -470,7 +529,8 @@ class PeerLinkService(PeerLink):
 
     async def _reconnect_loop(self, peer_id: str) -> None:
         """Attempt automatic reconnect with backoff; failover interfaces; emit recovery or device.lost."""
-        backoffs = [0.1, 0.3, 0.5, 1.0, 1.5]
+        faults = self.get_fault_injector(peer_id)
+        backoffs = [1.0, 2.0, 3.0] if faults.drop_rate >= 0.8 else [0.2, 0.5, 1.0, 1.5]
         reconnected = False
 
         try:
@@ -485,10 +545,6 @@ class PeerLinkService(PeerLink):
                     continue
 
             if reconnected:
-                # Announce recovery on bus
-                if conn := self._connections.get(peer_id):
-                    await self.ctx.bus.publish(LinkUpdateEvent(link=conn.quality()))
-
                 peer_info = next((d for d in self.ctx.devices.list_devices() if d.id == peer_id), None)
                 if peer_info:
                     await self.ctx.bus.publish(DevicePairedEvent(device=peer_info))
@@ -499,13 +555,27 @@ class PeerLinkService(PeerLink):
                     await self.ctx.bus.publish(StatsUpdateEvent(stats=recovered_stats))
             else:
                 log.warning("Peer %s lost after reconnect attempts. Emitting device.lost.", peer_id)
+                self._peer_loss[peer_id] = 100.0
                 await self.ctx.bus.publish(DeviceLostEvent(deviceId=peer_id))
         finally:
             self._reconnecting.discard(peer_id)
 
     async def startup(self) -> None:
-        """Service startup: start background peer.stats broadcaster."""
-        log.info("PeerLink service startup on device %s", self.ctx.device_id)
+        """Service startup: start background peer.stats broadcaster and report startup summary."""
+        local_info = self.ctx.devices.local_info()
+        sec_mode = (
+            "Plaintext (dev)"
+            if os.environ.get("TELEPORT_INSECURE_DEV")
+            else "AES-256-GCM (Ed25519/X25519 authenticated)"
+        )
+        addr_summary = ", ".join(f"{a.addr} [{a.link}]" for a in local_info.addrs)
+        log.info(
+            "Teleport Ready | Device: %s ('%s') | Addresses: %s | Security: %s",
+            self.ctx.device_id,
+            local_info.name,
+            addr_summary or "None",
+            sec_mode,
+        )
 
         # Broadcast local stats updates to all connected peers every second
         async def _broadcast_stats(event: StatsUpdateEvent) -> None:

@@ -52,7 +52,7 @@ class PairingManager:
         self._pin = f"{secrets.randbelow(1_000_000):06d}"
         self._failed_attempts = 0
         self._lockout_until = 0.0
-        log.info("Generated new Teleport pairing PIN: %s", self._pin)
+        log.info("Generated new Teleport pairing PIN (6 digits, displayable on local dashboard)")
         return self._pin
 
     def verify_pin(self, candidate_pin: str) -> tuple[bool, str | None]:
