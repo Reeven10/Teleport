@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -66,6 +67,14 @@ def build_context(settings: Settings | None = None) -> Context:
     ctx.register("workloads", WorkloadRunner(ctx, CheckpointStore(settings.home)))
     for name, create in _entry_points():
         ctx.register(name, create(ctx))
+    from .relay import PeerStatsRelay
+
+    ctx.register("relay", PeerStatsRelay(ctx))
+    # An agent bound to loopback is only reachable on loopback (dev:two), whatever its LAN addrs say.
+    force: Any = getattr(ctx.peers, "set_forced_link", None)
+    loopback = settings.host in ("127.0.0.1", "localhost", "::1")
+    if loopback and callable(force) and not os.environ.get("TELEPORT_FORCE_LINK"):
+        force("loopback")
     return ctx
 
 

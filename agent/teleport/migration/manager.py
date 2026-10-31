@@ -16,6 +16,7 @@ import binascii
 import builtins
 import json
 import logging
+import os
 import shutil
 import time
 import uuid
@@ -117,6 +118,11 @@ class Timeouts:
     start: float = 30.0
     retries: int = 3
     window: int = 8
+    chunk_delay: float = 0.0  # dev/demo slow motion, TELEPORT_DEV_SLOW_TRANSFER_MS
+
+    @classmethod
+    def from_env(cls) -> Timeouts:
+        return cls(chunk_delay=float(os.environ.get("TELEPORT_DEV_SLOW_TRANSFER_MS") or 0) / 1000)
 
 
 def prepare_payload(
@@ -206,7 +212,7 @@ class _TargetRun:
 class MigrationManager:
     def __init__(self, ctx: Context, timeouts: Timeouts | None = None) -> None:
         self.ctx = ctx
-        self.timeouts = timeouts or Timeouts()
+        self.timeouts = timeouts or Timeouts.from_env()
         self._sources: dict[str, _SourceRun] = {}
         self._targets: dict[str, _TargetRun] = {}
         self._target_lock = asyncio.Lock()
@@ -542,6 +548,8 @@ class MigrationManager:
 
         async def send_chunk(index: int, total: int, data: bytes, digest: str) -> None:
             async with window:
+                if t.chunk_delay:
+                    await asyncio.sleep(t.chunk_delay)
                 key: Key = ("ack", record.id, str(index))
                 for _attempt in range(t.retries + 1):
                     self._check(run)
@@ -591,6 +599,7 @@ class MigrationManager:
     async def _rollback(self, run: _SourceRun, reason: str) -> None:
         st, wid = run.status, run.status.workloadId
         st.error = reason
+        st.reasons = [*st.reasons, Reason(code="rollback", severity="block", text=f"Rolled back: {reason}")]
         st.phase = "ROLLING_BACK"
         await self._publish(st)
         try:

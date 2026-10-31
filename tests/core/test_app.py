@@ -55,7 +55,7 @@ def test_rest_routes(client: TestClient, tmp_path: Path) -> None:
     assert client.get("/api/devices").status_code == 200
     assert client.get("/api/history/decisions").json() == []
     assert client.put("/api/settings", json={"mode": "auto"}).json()["mode"] == "auto"
-    assert client.post("/api/pair", json={"addr": "x", "pin": "1"}).status_code == 501
+    assert client.post("/api/pair", json={"addr": "127.0.0.1:1", "pin": "1"}).status_code == 502
 
     bad = tmp_path / "bad"
     bad.mkdir()
