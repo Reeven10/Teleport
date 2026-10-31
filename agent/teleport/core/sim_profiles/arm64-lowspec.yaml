@@ -1,0 +1,18 @@
+# SIMULATED low-spec arm64 board (Raspberry Pi class).
+device:
+  name: Sim Board (arm64 low-spec)
+  os: linux
+  arch: arm64
+  cpuCores: 4
+  ramMb: 2048
+  gpu: null
+  diskFreeMb: 8000
+  runtimes: { python: "3.11.2" }
+  libs: [sqlite3]
+stats:
+  cpuPct: 15
+  memPct: 55
+  memFreeMb: 900
+  diskFreeMb: 8000
+  battery: null
+  online: true

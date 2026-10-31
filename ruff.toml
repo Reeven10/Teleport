@@ -1,0 +1,10 @@
+target-version = "py311"
+line-length = 110
+extend-exclude = ["node_modules", "ui", ".venv", ".teleport-dev"]
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+ignore = ["ASYNC240"]  # small sync file reads in async code are fine
+
+[lint.isort]
+known-first-party = ["teleport", "contract"]

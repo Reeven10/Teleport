@@ -1,8 +1,81 @@
-# Claude's Angels - Bit N Build 2026 Finals
+# Teleport (Claude's Angels, Bit N Build 2026 Finals)
 
-This repo is private. Only your team and the organizers can see it.
+Teleport keeps a running workload accessible across devices: it either migrates the workload with its
+state (checkpoint by checkpoint, hash-validated, single active instance via epoch fencing) or keeps it
+running and gives remote access. Every decision comes with reasons.
 
-Rules
+- Workflow, ownership and rules: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md)
+- Contract (source of truth, changes via P1): [contract/contract.ts](contract/contract.ts), mirrored in
+  [contract/contract.py](contract/contract.py)
+
+## Install
+
+Needs Python 3.11+ and Node 20+.
+
+```bash
+python -m venv .venv
+```
+
+Activate it (`.venv\Scripts\activate` on Windows, `source .venv/bin/activate` on macOS/Linux; the npm
+scripts find `.venv` even when it is not activated), then:
+
+```bash
+pip install -e agent
+```
+
+```bash
+npm install
+```
+
+`pip install -e agent` installs every Python dependency the team needs (runtime, pytest, ruff, mypy).
+`npm install` installs every UI dependency. Only P1 edits `agent/pyproject.toml` and `package.json`.
+For `npm run e2e`, also run `npx playwright install chromium` once.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev:two` | Agent A on :8765 (`.teleport-dev/a`, profile `default`), agent B on :8766 (`.teleport-dev/b`, profile `arm64-lowspec`), UI dev server on :5173 |
+| `npm run dev:agent` | One agent with env settings (`TELEPORT_PORT`, `TELEPORT_HOME`, `TELEPORT_SIM_PROFILE`, `TELEPORT_NAME`, `TELEPORT_HOST`) |
+| `npm run dev:ui` | UI dev server only (proxies `/api` and `/ws` to `TELEPORT_AGENT`, default A) |
+| `npm run build` | Typecheck and build the UI into `ui/dist` (the agent serves it at `/`) |
+| `npm test` | pytest (`tests/`) |
+| `npm run test:ui` | Vitest (`ui/src/**/*.test.tsx`, `tests/ui/**/*.test.tsx`) |
+| `npm run e2e` | Playwright (`tests/ui/e2e`) |
+| `npm run typecheck` | mypy strict + `tsc` strict |
+| `npm run lint` / `npm run format` | ruff + eslint / ruff format |
+
+The UI on :5173 talks to agent A. Open `http://localhost:5173/?agent=http://127.0.0.1:8766` to view B.
+Agent CLI flags override env: `python -m teleport --port 8766 --home .teleport-dev/b --sim-profile arm64-lowspec`.
+Simulated profiles live in `agent/teleport/core/sim_profiles/` and everything they produce is marked `simulated`.
+By default an agent binds 127.0.0.1; set `TELEPORT_HOST=0.0.0.0` for a real two-device setup.
+
+## Architecture
+
+```
+        Device A (agent :8765)                                   Device B (agent :8766)
+ +-------------------------------------+   encrypted peer link   +-----------------------+
+ |  FastAPI  /api/*  /ws/events  ui/   |<=======================>|  same agent           |
+ |  ---------------------------------  |   (wifi or cable)       |                       |
+ |  core: Context, EventBus, Settings  |                         |                       |
+ |   devices   transport   security    |                         |                       |
+ |   feasibility orchestration history |                         |                       |
+ |   migration authority   remote      |                         |                       |
+ +-------------------------------------+                         +-----------------------+
+            ^  REST + WebSocket
+            |
+   Dashboard (ui/, React) on :5173 in dev, served from ui/dist by the agent otherwise
+```
+
+Modules only meet through `ctx.bus` (typed `BusEvent`s) and the Protocols in `contract/contract.py`.
+`create_app()` (agent/teleport/core/app.py) builds the Context, calls each `create_*(ctx)` entry
+function, starts services (`startup()`/`shutdown()`), and mounts the REST routes from the contract
+(agent/teleport/core/api.py). The current modules are stubs from P1: each owner replaces its own
+`__init__.py` while keeping the entry function and the Protocol. A stub action that is not built yet
+returns HTTP 501.
+
+## Rules
+
 - Push all your work here. Don't rewrite history (no force-push, no deleting branches). It gets checked.
 - Don't commit secrets or .env files. Commit a .env.example instead.
 - Don't change the repo visibility and don't add anyone outside your team.

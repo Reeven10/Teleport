@@ -1,0 +1,18 @@
+# SIMULATED x86_64 laptop with plenty of resources.
+device:
+  name: Sim Laptop (x86_64)
+  os: linux
+  arch: x86_64
+  cpuCores: 8
+  ramMb: 16384
+  gpu: null
+  diskFreeMb: 200000
+  runtimes: { python: "3.11.9", node: "22.14.0" }
+  libs: [numpy, sqlite3]
+stats:
+  cpuPct: 25
+  memPct: 40
+  memFreeMb: 9800
+  diskFreeMb: 200000
+  battery: { pct: 85, charging: false }
+  online: true

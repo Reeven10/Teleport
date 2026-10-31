@@ -1,7 +1,27 @@
+# secrets
 .env
 .env.*
 !.env.example
+*.local
+
+# node / ui
 node_modules/
+dist/
+ui/test-results/
+ui/playwright-report/
+
+# python
+.venv/
 __pycache__/
 *.pyc
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# teleport state
+.teleport-dev/
+*.db
+
+# os
 .DS_Store

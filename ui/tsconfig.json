@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["vite/client", "node", "@testing-library/jest-dom/vitest"],
+    "baseUrl": ".",
+    "paths": {
+      "@contract": ["../contract/contract.ts"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "../contract/contract.ts", "../tests/ui", "vite.config.ts", "playwright.config.ts"]
+}

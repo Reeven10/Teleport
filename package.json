@@ -1,0 +1,54 @@
+{
+  "name": "teleport",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Teleport monorepo. Owned by P1: ask P1 to add dependencies.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:agent": "node scripts/py.mjs -m teleport",
+    "dev:agent:a": "node scripts/py.mjs -m teleport --port 8765 --home .teleport-dev/a --sim-profile default --name \"Device A\"",
+    "dev:agent:b": "node scripts/py.mjs -m teleport --port 8766 --home .teleport-dev/b --sim-profile arm64-lowspec --name \"Device B\"",
+    "dev:ui": "vite --config ui/vite.config.ts",
+    "dev:two": "concurrently -k -n A,B,UI -c cyan,magenta,green \"npm:dev:agent:a\" \"npm:dev:agent:b\" \"npm:dev:ui\"",
+    "build": "tsc -p ui/tsconfig.json && vite build --config ui/vite.config.ts",
+    "test": "node scripts/py.mjs -m pytest",
+    "test:ui": "vitest run --config ui/vite.config.ts",
+    "e2e": "playwright test --config ui/playwright.config.ts",
+    "typecheck": "node scripts/py.mjs -m mypy && tsc -p ui/tsconfig.json",
+    "lint": "node scripts/py.mjs -m ruff check . && eslint ui tests/ui contract",
+    "format": "node scripts/py.mjs -m ruff format . && node scripts/py.mjs -m ruff check --fix ."
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.0",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@playwright/test": "^1.52.0",
+    "@tailwindcss/vite": "^4.1.4",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.14.0",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
+    "@vitejs/plugin-react": "^4.4.1",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.0.0",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.1.4",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.31.0",
+    "vite": "^6.3.2",
+    "vitest": "^3.1.2"
+  }
+}
