@@ -158,6 +158,7 @@ async def test_stale_stats_flagged_after_5_seconds(tmp_path: Path) -> None:
 async def test_failover_cable_to_wifi(tmp_path: Path) -> None:
     ctx_a = build_context(Settings(home=tmp_path / "a", port=8795, deviceName="Node A"))
     service_a = cast(PeerLinkService, ctx_a.peers)
+    service_a.set_forced_link(None)
 
     # Device B with both cable and wifi addresses
     peer_id = "dev-b-multi"
