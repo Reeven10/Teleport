@@ -65,8 +65,8 @@ class Prefs(BaseModel):
     precopyTargetId: str = ""
     # How often leases are exchanged with connected peers (split-brain guard).
     leaseSyncS: float = Field(5, ge=0.1, le=300)
-    # Battery trend window used by the predictor (P3 reads it).
-    predictionWindowSec: float = Field(60, ge=5, le=3600)
+    # Battery trend window used by P3's BatteryPredictor (seconds of history for the trend).
+    predictionWindowSec: float = Field(600, ge=5, le=3600)
     # Link the peer link prefers: "auto" picks cable, then wifi. Applied to the transport (core).
     preferredLink: PreferredLink = "auto"
     # Remote access consent policy on this host (P4's remote service reads it).

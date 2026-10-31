@@ -567,12 +567,34 @@ class Orchestrator(Service, Protocol):
 
 @runtime_checkable
 class HistoryStore(Service, Protocol):
-    """P3. SQLite store under TELEPORT_HOME. log_decision publishes decision.logged."""
+    """P3. SQLite store under TELEPORT_HOME. log_decision publishes decision.logged.
+
+    The dict-shaped results back P3's /api/history router (summaries, detail with timeline, export).
+    """
 
     async def log_decision(self, log: DecisionLog) -> None: ...
     async def list_devices(self) -> builtins.list[DeviceInfo]: ...
-    async def list_migrations(self) -> builtins.list[MigrationStatus]: ...
-    async def list_decisions(self) -> builtins.list[DecisionLog]: ...
+    async def list_migrations(
+        self,
+        device: str | None = None,
+        workload: str | None = None,
+        decision: str | None = None,
+        outcome: str | None = None,
+        since: float | None = None,
+        until: float | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> builtins.list[MigrationStatus]: ...
+    async def list_decisions(
+        self, limit: int = 100, offset: int = 0, workload: str | None = None
+    ) -> builtins.list[DecisionLog]: ...
+    async def list_device_summaries(self) -> builtins.list[dict[str, Any]]:
+        """Every device ever seen: id, firstSeen, lastSeen, device (DeviceInfo), linkTypes, migrationCount."""
+        ...
+
+    async def get_device_detail(self, device_id: str) -> dict[str, Any] | None: ...
+    async def get_migration(self, migration_id: str) -> dict[str, Any] | None: ...
+    async def export_history(self) -> dict[str, Any]: ...
 
 
 @runtime_checkable

@@ -51,6 +51,17 @@ def _entry_points() -> list[tuple[str, Callable[[Context], Service]]]:
     ]
 
 
+def _history_router(ctx: Context) -> APIRouter | None:
+    """The history module's own /api/history router: its `router` attribute, else the
+    build_history_router(ctx) it exports (P3). None means core serves the minimal contract routes."""
+    if isinstance(router := getattr(ctx.history, "router", None), APIRouter):
+        return router
+    from .. import history
+
+    build: Any = getattr(history, "build_history_router", None)
+    return build(ctx) if callable(build) else None
+
+
 def build_context(settings: Settings | None = None) -> Context:
     settings = settings or Settings.from_env()
     settings.home.mkdir(parents=True, exist_ok=True)
@@ -132,7 +143,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def not_implemented(_: Request, exc: NotImplementedError) -> JSONResponse:
         return JSONResponse({"detail": str(exc) or "not implemented yet"}, status_code=501)
 
-    app.include_router(build_router(ctx))
+    history_router = _history_router(ctx)
+    app.include_router(build_router(ctx, history_routes=history_router is None))
+    if history_router is not None:
+        app.include_router(history_router)
     app.include_router(build_sdk_router(ctx))
 
     @app.websocket("/ws/events")
@@ -167,7 +181,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Module-specific extra routes: a service may expose a `router: APIRouter` attribute.
     for _name, service in ctx.services():
         router: Any = getattr(service, "router", None)
-        if isinstance(router, APIRouter):
+        if isinstance(router, APIRouter) and router is not history_router:  # that one is mounted above
             app.include_router(router)
 
     if ctx.settings.uiDist.is_dir():

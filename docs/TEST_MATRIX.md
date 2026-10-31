@@ -82,6 +82,7 @@ Every row must end COMPLETED or ROLLED_BACK, with a short dashboard message, and
 | --- | --- | --- | --- | --- |
 | H1 | Devices, migrations, decisions saved; survive an agent restart | auto | `test_matrix.py::test_h1_history_is_saved_and_survives_restart` | PASS |
 | H2 | History page shows real data | manual | dev:two, History page after a migration: "1 Migrations Logged", real ids | PASS |
+| H4 | P3's full history API mounted (`/api/history/devices/{id}`, `/migrations/{id}`, `/export`, filters) | auto | `tests/core/test_app.py::test_history_module_router_is_mounted` | PASS |
 | H3 | History store unit tests | auto | `tests/history/test_history.py` (7); `test_history_revisit.py` | PASS (7); **ERROR** revisit file does not import (P3-8) |
 | R1 | Reasons for every decision (severity, code, sentence) | auto | `assert_reasons` in F3, T1, T1b, T2 and over all of `/api/history/decisions` in H1; rollback reason in RB1 | PASS |
 | R2 | Reasons visible in the dashboard | manual | Migration and History pages list the reasons of the last decision | NOT CHECKED in detail (P4 pages show mock data first, P4-1) |
@@ -99,7 +100,7 @@ Every row must end COMPLETED or ROLLED_BACK, with a short dashboard message, and
 | U2 | Remote view with a real session | manual | Remote page without any session | **FAIL**: shows "STREAMING ACTIVE, 18.4 FPS" with no session (P4-7) |
 | U3 | UI unit tests | auto | `npm run test:ui` | PASS (19/19) |
 | U4 | UI end to end | auto | `npm run e2e` | PASS 7/7 without an agent; 5/7 with a live agent (P4-8) |
-| Q1 | `npm run typecheck` | auto | mypy strict + tsc | **FAIL**: 51 mypy errors in 13 P3/P4 files (P3-9, P4-9); P1 files and tsc clean |
+| Q1 | `npm run typecheck` | auto | mypy strict + tsc | **FAIL**: 32 mypy errors in 12 P3/P4 files (P3-9, P4-9); P1 files and tsc clean. The history router's 19 are gone (Protocol extended) |
 | Q2 | `npm run lint` | auto | ruff + eslint | **FAIL**: 7 ruff errors, all in P3 files (P3-10); P1 files and eslint clean |
 | C1 | Settings from the dashboard persist (`predictionWindowSec`, `preferredLink`, `remoteConsent`, `checkpointChunkKb` alias), typos rejected | auto | `tests/core/test_app.py::test_dashboard_settings_persist_and_apply` | PASS |
 | C2 | Contract flags `LinkQuality.online/simulated`, `Stats.stale` | auto | `tests/core/test_contract.py::test_link_quality_and_stats_optional_flags` | PASS |
