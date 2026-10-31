@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from contract.contract import (
     Authority,
     AuthorityChangeEvent,
-    CheckpointUnit,
+    CheckpointRecord,
     DecisionLog,
     DeviceInfo,
     DevicePairedEvent,
@@ -47,7 +47,7 @@ class FakeWorkloads:
 def make_context(tmp_path: Path, manifests: list[WorkloadManifest] | None = None) -> Context:
     settings = Settings(home=tmp_path)
     ctx = Context(settings=settings, device_id="local-dev")
-    ctx.workloads = FakeWorkloads(manifests or [])  # type: ignore
+    ctx.register("workloads", FakeWorkloads(manifests or []))
     return ctx
 
 
@@ -63,7 +63,7 @@ def make_device(device_id: str, name: str = "Test Host") -> DeviceInfo:
         diskFreeMb=50000,
         runtimes={"python": "3.11.9"},
         libs=["numpy"],
-        addrs=["192.168.1.10:8765"],
+        addrs=[],
         agentVersion="0.1.0",
     )
 
@@ -101,8 +101,12 @@ def make_migration(
             Reason(code="r_net", severity="pass", text="Link latency acceptable."),
         ],
         checkpoints=[
-            CheckpointUnit(id="cp-1", path="/tmp/cp1.tar.gz", sizeBytes=25_000_000, sha256="abc"),
-            CheckpointUnit(id="cp-2", path="/tmp/cp2.tar.gz", sizeBytes=25_000_000, sha256="def"),
+            CheckpointRecord(
+                id="cp-1", seq=1, sizeBytes=25_000_000, sha256="abc", createdAt=st, sent=True, validated=True
+            ),
+            CheckpointRecord(
+                id="cp-2", seq=2, sizeBytes=25_000_000, sha256="def", createdAt=st, sent=True, validated=True
+            ),
         ],
         bytesTotal=bytes_total,
         bytesDone=bytes_done,
@@ -132,7 +136,7 @@ class TestSchemaVersionAndMigration:
         conn = sqlite3.connect(str(db_file))
         cursor = conn.cursor()
         # Create minimal v1 schema
-        cursor.execute(
+        cursor.executescript(
             """
             CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL);
             INSERT INTO schema_version VALUES (1, 1000.0);
@@ -183,7 +187,7 @@ class TestHistoryRevisitAndFiltering:
         m3 = make_migration("m3", workload_id="w-B", source_id="d1", target_id="d3",
                             decision="REMOTE_ACCESS", phase="FAILED", started_at=base_time + 30)
         m4 = make_migration("m4", workload_id="w-B", source_id="d3", target_id="d1",
-                            decision="STAY", phase="ABORTED", started_at=base_time + 40)
+                            decision="STAY", phase="ROLLED_BACK", started_at=base_time + 40)
         m5 = make_migration("m5", workload_id="w-C", source_id="d4", target_id="d5",
                             decision="MIGRATE", phase="COMPLETED", started_at=base_time + 50)
 
@@ -271,13 +275,19 @@ class TestHistoryRevisitAndFiltering:
             name="Video Processor",
             command="python run.py",
             runtime={"name": "python", "minVersion": "3.11"},  # type: ignore
+            arch=["x86_64"],
+            os=["linux"],
             minRamMb=2048,
             minCpuCores=4,
             minDiskMb=5000,
+            needsGpu=False,
+            libs=[],
+            checkpoints=[],
+            remoteCapable=True,
         )
         ctx = make_context(tmp_path, manifests=[manifest])
         store = SqliteHistoryStore(ctx)
-        ctx.history = store  # type: ignore
+        ctx.register("history", store)
         await store.startup()
 
         # 1. Pair devices
@@ -310,7 +320,7 @@ class TestHistoryRevisitAndFiltering:
             source_id="dev-alpha",
             target_id="dev-beta",
             phase="COMPLETED",
-            link="direct",
+            link="cable",
             interruption_ms=88,
         )
         await store.ctx.bus.publish(MigrationStatusEvent(status=m))
@@ -323,7 +333,7 @@ class TestHistoryRevisitAndFiltering:
         assert full["manifestSummary"]["name"] == "Video Processor"
         assert full["source"]["id"] == "dev-alpha"
         assert full["target"]["id"] == "dev-beta"
-        assert full["link"] == "direct"
+        assert full["link"] == "cable"
         assert full["interruptionMs"] == 88
         assert full["metrics"]["bytesTotal"] == m.bytesTotal
         assert len(full["authorityTimeline"]) == 1
@@ -382,7 +392,7 @@ class TestHistoryRESTEndpoints:
     async def test_rest_client_reconstructs_two_migrations(self, tmp_path: Path) -> None:
         ctx = make_context(tmp_path)
         store = SqliteHistoryStore(ctx)
-        ctx.history = store  # type: ignore
+        ctx.register("history", store)
         await store.startup()
 
         # Seed two migrations

@@ -17,9 +17,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from teleport.core.context import Context
-from teleport.core.settings import Prefs, Settings
-from teleport.orchestration.service import OrchestratorService
 from contract.contract import (
     Battery,
     CheckpointDef,
@@ -31,6 +28,9 @@ from contract.contract import (
     Stats,
     WorkloadManifest,
 )
+from teleport.core.context import Context
+from teleport.core.settings import Prefs, Settings
+from teleport.orchestration.service import OrchestratorService
 
 
 class MockWorkloadService:

@@ -45,7 +45,7 @@ class OrchestratorService:
     ) -> None:
         self.ctx = ctx
         self._clock = clock or time.time
-        self.predictor = battery_predictor or BatteryPredictor(window_sec=600.0)
+        self.predictor = battery_predictor or BatteryPredictor(window_sec=600.0, ctx=ctx)
 
         # Trigger monitoring windows and timestamps
         self._cpu_pressure_start: dict[str, float] = {}
@@ -127,6 +127,14 @@ class OrchestratorService:
     @property
     def connectivity_window_sec(self) -> float:
         return 3.0
+
+    @property
+    def prediction_window_sec(self) -> float:
+        if hasattr(self.ctx, "prefs") and hasattr(self.ctx.prefs, "predictionWindowSec"):
+            val = self.ctx.prefs.predictionWindowSec
+            if val is not None:
+                return float(val)
+        return 600.0
 
     @property
     def predicted_threshold_sec(self) -> float:

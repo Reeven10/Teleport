@@ -7,6 +7,7 @@ over discharging periods, rejects noise, and projects time to empty (TTE).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -19,10 +20,24 @@ class BatterySample:
 class BatteryPredictor:
     """Predicts battery exhaustion by fitting ordinary least squares over discharging history."""
 
-    def __init__(self, window_sec: float = 600.0) -> None:
+    def __init__(self, window_sec: float = 600.0, ctx: Any = None) -> None:
         # Retention window (default 10 minutes = 600 seconds)
-        self.window_sec = window_sec
+        self._window_sec = window_sec
+        self.ctx = ctx
         self._history: dict[str, list[BatterySample]] = {}
+
+    @property
+    def window_sec(self) -> float:
+        """Dynamic window length, reading ctx.prefs.predictionWindowSec if configured."""
+        if self.ctx is not None and hasattr(self.ctx, "prefs"):
+            val = getattr(self.ctx.prefs, "predictionWindowSec", None)
+            if val is not None:
+                return float(val)
+        return self._window_sec
+
+    @window_sec.setter
+    def window_sec(self, value: float) -> None:
+        self._window_sec = value
 
     def add_reading(self, device_id: str, ts: float, pct: float, charging: bool) -> None:
         """Add a new battery telemetry sample and prune readings older than window_sec."""

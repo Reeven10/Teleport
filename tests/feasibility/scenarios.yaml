@@ -1,0 +1,516 @@
+# Feasibility Evaluation Scenario Matrix (P3)
+# Contains 34 exhaustive scenarios testing individual checks, combinations,
+# all decisions (MIGRATE, REMOTE_ACCESS, STAY), cable vs wifi, dead links,
+# depleting source battery, and missing telemetry data.
+
+scenarios:
+  # ---------------------------------------------------------------- PASS / MIGRATE Scenarios
+  - id: scen_01_baseline_cable
+    name: "Clean baseline migration over Gigabit cable link"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_cable"
+    stats: "stats_linux_gpu"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_02_baseline_wifi
+    name: "Clean baseline migration over high-speed Wi-Fi"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_good_wifi"
+    stats: "stats_linux_gpu"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_03_multiarch_macos_arm64
+    name: "Multi-arch workload migrating to Apple Silicon macOS laptop"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_macos_laptop"
+    link: "link_good_wifi"
+    stats: "stats_macos_laptop"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_04_target_ac_mains
+    name: "Target is a desktop workstation running on AC mains without battery"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_no_battery_desktop"
+    link: "link_cable"
+    stats: "stats_no_battery_desktop"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_05_target_battery_low_warn
+    name: "Target battery is 25% (warn, but not blocked since >= 15%)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_low_battery_laptop"
+    link: "link_good_wifi"
+    stats: "stats_low_battery_laptop"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_06_target_battery_charging_low_pct
+    name: "Target battery is 10% but plugged in and charging (pass)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_low_battery_laptop"
+    link: "link_good_wifi"
+    stats:
+      deviceId: "dev-low-battery"
+      battery: { pct: 10.0, charging: true }
+      online: true
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_07_degraded_wifi_warn
+    name: "Degraded Wi-Fi link with low throughput triggers warning but allows MIGRATE"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_bad_wifi"
+    stats: "stats_linux_gpu"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_08_gpu_workload_gpu_target
+    name: "Heavy ML workload with GPU requirements satisfied by NVIDIA GPU target"
+    manifest: "manifest_heavy_ml"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_cable"
+    stats: "stats_linux_gpu"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  # ---------------------------------------------------------------- REMOTE_ACCESS Scenarios (Remote Capable)
+  - id: scen_09_arch_mismatch_remote
+    name: "Architecture mismatch (x86_64 binary on arm64 target) with remote access fallback"
+    manifest: "manifest_x86_binary"
+    source: "device_source_default"
+    target: "device_macos_laptop"
+    link: "link_good_wifi"
+    stats: "stats_macos_laptop"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["arch.mismatch"]
+
+  - id: scen_10_os_mismatch_remote
+    name: "OS mismatch (Windows-specific manifest on Linux target) with remote access"
+    manifest:
+      id: "w-win-gui"
+      name: "Windows CAD Tool"
+      command: "cad.exe"
+      runtime: { name: "dotnet", minVersion: "8.0" }
+      arch: ["x86_64"]
+      os: ["windows"]
+      minRamMb: 4096
+      minCpuCores: 4
+      minDiskMb: 2000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_windows_laptop"
+    target: "device_linux_gpu"
+    link: "link_cable"
+    stats: "stats_linux_gpu"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["os.mismatch"]
+
+  - id: scen_11_runtime_missing_remote
+    name: "Required runtime missing on target (Node.js required, target only has Python)"
+    manifest:
+      id: "w-node-app"
+      name: "Node Web Service"
+      command: "node server.js"
+      runtime: { name: "nodejs", minVersion: "20.0.0" }
+      arch: ["x86_64"]
+      os: ["linux"]
+      minRamMb: 1024
+      minCpuCores: 2
+      minDiskMb: 1000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_cable"
+    stats: "stats_linux_gpu"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["runtime.missing"]
+
+  - id: scen_12_runtime_version_too_low_remote
+    name: "Runtime version too old (Python 3.11 required, target has 3.9)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_old_python"
+    link: "link_cable"
+    stats: "stats_old_python"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["runtime.version_low"]
+
+  - id: scen_13_missing_library_remote
+    name: "Required native library missing on target with remote fallback"
+    manifest: "manifest_missing_library"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_good_wifi"
+    stats: "stats_linux_gpu"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["libs.missing"]
+
+  - id: scen_14_ram_insufficient_remote
+    name: "Insufficient target RAM (requires 8GB, target has 3GB free) with remote fallback"
+    manifest:
+      id: "w-ram-heavy"
+      name: "In-Memory Database"
+      command: "db --serve"
+      runtime: { name: "python", minVersion: "3.11" }
+      arch: ["x86_64"]
+      os: ["linux"]
+      minRamMb: 8000
+      minCpuCores: 2
+      minDiskMb: 1000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_source_default"
+    target: "device_low_spec_arm"
+    link: "link_good_wifi"
+    stats: "stats_low_spec_arm"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["ram.insufficient"]
+
+  - id: scen_15_cpu_insufficient_remote
+    name: "Insufficient target CPU cores (requires 16 cores, target has 4 cores)"
+    manifest:
+      id: "w-cpu-heavy"
+      name: "Parallel Compiler"
+      command: "make -j16"
+      runtime: { name: "python", minVersion: "3.11" }
+      arch: ["x86_64"]
+      os: ["linux"]
+      minRamMb: 2000
+      minCpuCores: 16
+      minDiskMb: 2000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_source_default"
+    target: "device_windows_laptop"
+    link: "link_cable"
+    stats: "stats_windows_laptop"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["cpu.insufficient"]
+
+  - id: scen_16_disk_insufficient_remote
+    name: "Insufficient target disk space (requires 40GB free, target has 8GB free)"
+    manifest:
+      id: "w-big-disk"
+      name: "Dataset Analytics"
+      command: "python analyze.py"
+      runtime: { name: "python", minVersion: "3.11" }
+      arch: ["x86_64"]
+      os: ["linux"]
+      minRamMb: 2000
+      minCpuCores: 4
+      minDiskMb: 40000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_source_default"
+    target: "device_low_spec_arm"
+    link: "link_cable"
+    stats: "stats_low_spec_arm"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["disk.insufficient"]
+
+  - id: scen_17_gpu_missing_remote
+    name: "GPU required by workload, but target has no GPU"
+    manifest:
+      id: "w-gpu-interactive"
+      name: "3D Visualizer"
+      command: "python vis.py"
+      runtime: { name: "python", minVersion: "3.11" }
+      arch: ["x86_64"]
+      os: ["windows"]
+      minRamMb: 2048
+      minCpuCores: 4
+      minDiskMb: 2000
+      needsGpu: true
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_windows_laptop"
+    target: "device_windows_laptop"
+    link: "link_good_wifi"
+    stats: "stats_windows_laptop"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["gpu.missing"]
+
+  - id: scen_18_target_battery_critical_remote
+    name: "Target battery critically low (10% discharging < 15% threshold)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_low_battery_laptop"
+    link: "link_good_wifi"
+    stats: "stats_critical_battery"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["battery.critical"]
+
+  - id: scen_19_multi_block_arch_and_ram_remote
+    name: "Multiple blocks: arch mismatch and insufficient RAM on target"
+    manifest: "manifest_x86_binary"
+    source: "device_source_default"
+    target: "device_low_spec_arm"
+    link: "link_cable"
+    stats: "stats_low_spec_arm"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["arch.mismatch", "ram.insufficient"]
+
+  - id: scen_20_multi_block_os_gpu_disk_remote
+    name: "Multiple blocks: OS mismatch, GPU missing, and disk space insufficient"
+    manifest:
+      id: "w-combo"
+      name: "Windows VR Sim"
+      command: "sim.exe"
+      runtime: { name: "dotnet", minVersion: "8.0" }
+      arch: ["arm64"]
+      os: ["windows"]
+      minRamMb: 1024
+      minCpuCores: 2
+      minDiskMb: 80000
+      needsGpu: true
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_windows_laptop"
+    target: "device_low_spec_arm"
+    link: "link_cable"
+    stats: "stats_low_spec_arm"
+    expected_decision: "REMOTE_ACCESS"
+    expected_blocking_codes: ["os.mismatch", "gpu.missing", "disk.insufficient"]
+
+  # ---------------------------------------------------------------- STAY Scenarios (Cannot Migrate or Remote)
+  - id: scen_21_arch_mismatch_not_remote_capable
+    name: "Architecture mismatch when workload cannot be accessed remotely"
+    manifest:
+      id: "w-backend-daemon"
+      name: "Headless Database Service"
+      command: "dbd --run"
+      runtime: { name: "python", minVersion: "3.11" }
+      arch: ["x86_64"]
+      os: ["linux"]
+      minRamMb: 1024
+      minCpuCores: 2
+      minDiskMb: 1000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: false
+    source: "device_source_default"
+    target: "device_macos_laptop"
+    link: "link_good_wifi"
+    stats: "stats_macos_laptop"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["arch.mismatch"]
+
+  - id: scen_22_os_mismatch_not_remote_capable
+    name: "OS mismatch when workload cannot be accessed remotely"
+    manifest:
+      id: "w-linux-kernel-mod"
+      name: "Linux Network Driver"
+      command: "driver --daemon"
+      runtime: { name: "python", minVersion: "3.11" }
+      arch: ["x86_64"]
+      os: ["linux"]
+      minRamMb: 1024
+      minCpuCores: 2
+      minDiskMb: 1000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: false
+    source: "device_source_default"
+    target: "device_windows_laptop"
+    link: "link_cable"
+    stats: "stats_windows_laptop"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["os.mismatch"]
+
+  - id: scen_23_ram_insufficient_not_remote_capable
+    name: "Target RAM insufficient and remote access unsupported"
+    manifest:
+      id: "w-heavy-cache"
+      name: "In-Memory Cache"
+      command: "cache"
+      runtime: { name: "python", minVersion: "3.11" }
+      arch: ["arm64"]
+      os: ["linux"]
+      minRamMb: 16000
+      minCpuCores: 2
+      minDiskMb: 1000
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: false
+    source: "device_source_default"
+    target: "device_low_spec_arm"
+    link: "link_cable"
+    stats: "stats_low_spec_arm"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["ram.insufficient"]
+
+  - id: scen_24_target_offline
+    name: "Target device is offline (must STAY on source)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_offline_server"
+    link: "link_cable"
+    stats: "stats_offline_server"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["online.offline"]
+
+  - id: scen_25_dead_link_no_connection
+    name: "Network link to target is dead (link is None)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: null
+    stats: "stats_linux_gpu"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["link.no_link"]
+
+  - id: scen_26_link_excessive_packet_loss
+    name: "Network link packet loss is critically high (8.5% > 5% threshold)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_lossy"
+    stats: "stats_linux_gpu"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["link.high_loss"]
+
+  - id: scen_27_hw_block_link_too_slow_for_streaming
+    name: "Hardware block + link throughput (1.0 Mbps < 2.0 Mbps) too slow for remote video streaming"
+    manifest: "manifest_missing_library"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link:
+      peerId: "dev-target-peer"
+      link: "wifi"
+      rttMs: 50.0
+      mbps: 1.0
+      lossPct: 0.5
+    stats: "stats_linux_gpu"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["libs.missing"]
+
+  - id: scen_28_hw_block_link_rtt_too_high_for_streaming
+    name: "Hardware block + link RTT (450 ms > 300 ms) too high for interactive remote access"
+    manifest: "manifest_missing_library"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link:
+      peerId: "dev-target-peer"
+      link: "wifi"
+      rttMs: 450.0
+      mbps: 25.0
+      lossPct: 0.5
+    stats: "stats_linux_gpu"
+    expected_decision: "STAY"
+    expected_blocking_codes: ["libs.missing"]
+
+  # ---------------------------------------------------------------- Edge Cases: Depleting Battery & Missing Data
+  - id: scen_29_source_battery_depleting_warning
+    name: "Source battery cannot comfortably last transfer duration (triggers warning)"
+    manifest: "manifest_light_python"
+    source: "device_low_battery_laptop"
+    target: "device_linux_gpu"
+    link: "link_bad_wifi"
+    stats: "stats_linux_gpu"
+    source_stats:
+      deviceId: "dev-source-low"
+      battery: { pct: 1.0, charging: false }
+      online: true
+    snapshot_size_mb: 200.0
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_30_missing_target_stats_telemetry
+    name: "Target stats telemetry missing (treated gracefully with warnings, never crashes)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_good_wifi"
+    stats: null
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_31_missing_link_quality_telemetry
+    name: "Link quality telemetry missing (treated as degraded warn, allows MIGRATE)"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link:
+      peerId: "dev-target-peer"
+      link: "wifi"
+      rttMs: null
+      mbps: null
+      lossPct: null
+    stats: "stats_linux_gpu"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_32_workload_generic_binary_runtime
+    name: "Manifest with generic standalone binary runtime passes on target"
+    manifest:
+      id: "w-static"
+      name: "Static Binary"
+      command: "./run"
+      runtime: { name: "python", minVersion: "3.10" }
+      arch: ["x86_64"]
+      os: ["linux"]
+      minRamMb: 512
+      minCpuCores: 1
+      minDiskMb: 100
+      needsGpu: false
+      libs: []
+      checkpoints: []
+      remoteCapable: true
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_cable"
+    stats: "stats_linux_gpu"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_33_cable_vs_wifi_performance_comparison
+    name: "High-throughput cable link delivers sub-second transfer and ~92ms interruption"
+    manifest: "manifest_light_python"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_cable"
+    stats: "stats_linux_gpu"
+    snapshot_size_mb: 50.0
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []
+
+  - id: scen_34_remote_only_gui_app
+    name: "GUI app marked remote-only stays responsive under good Wi-Fi link"
+    manifest: "manifest_remote_only_gui"
+    source: "device_source_default"
+    target: "device_linux_gpu"
+    link: "link_good_wifi"
+    stats: "stats_linux_gpu"
+    expected_decision: "MIGRATE"
+    expected_blocking_codes: []

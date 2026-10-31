@@ -32,7 +32,9 @@ def calculate_estimates(
 
     Also checks if the estimated transfer time exceeds remaining battery runtime on the source.
     """
-    if link is None or getattr(link, "mbps", 0.0) <= 0.0:
+    mbps_val = getattr(link, "mbps", None) if link is not None else None
+    rtt_val = getattr(link, "rttMs", None) if link is not None else None
+    if link is None or mbps_val is None or mbps_val <= 0.0:
         return 0.0, 0.0, None
 
     # Determine total bytes to transfer
@@ -43,8 +45,8 @@ def calculate_estimates(
         min_disk = getattr(manifest, "minDiskMb", 100)
         total_bytes = max(10 * 1024 * 1024, (min_disk * 1024 * 1024) // 4)
 
-    mbps = max(0.1, float(link.mbps))
-    rtt_ms = max(0.1, float(link.rttMs))
+    mbps = max(0.1, float(mbps_val))
+    rtt_ms = max(0.1, float(rtt_val if rtt_val is not None else 20.0))
 
     # Protocol throughput efficiency: 15% overhead for chunk framing, encryption, and hash tags
     effective_bytes_sec = (mbps * 125_000.0) / 1.15
@@ -159,11 +161,18 @@ def evaluate_feasibility(
         if compat_blocks:
             # Check remote streaming capability (>= 10 FPS at 720p on LAN)
             remote_capable = bool(getattr(manifest, "remoteCapable", False))
+            loss_val = getattr(link, "lossPct", None) if link is not None else None
+            mbps_val = getattr(link, "mbps", None) if link is not None else None
+            rtt_val = getattr(link, "rttMs", None) if link is not None else None
+
             link_can_stream = (
                 link is not None
-                and float(getattr(link, "lossPct", 100.0)) <= 5.0
-                and float(getattr(link, "mbps", 0.0)) >= 2.0
-                and float(getattr(link, "rttMs", 999.0)) <= 300.0
+                and loss_val is not None
+                and float(loss_val) <= 5.0
+                and mbps_val is not None
+                and float(mbps_val) >= 2.0
+                and rtt_val is not None
+                and float(rtt_val) <= 300.0
             )
 
             if remote_capable and link_can_stream:

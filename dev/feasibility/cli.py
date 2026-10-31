@@ -14,7 +14,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from teleport.feasibility.engine import evaluate_feasibility
 from contract.contract import (
     DeviceInfo,
     FeasibilityResult,
@@ -22,6 +21,7 @@ from contract.contract import (
     Stats,
     WorkloadManifest,
 )
+from teleport.feasibility.engine import evaluate_feasibility
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "tests" / "feasibility" / "fixtures"
 

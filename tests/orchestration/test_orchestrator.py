@@ -14,9 +14,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from teleport.core.context import Context
-from teleport.core.settings import Prefs, Settings
-from teleport.orchestration.service import OrchestratorService
 from contract.contract import (
     Authority,
     Battery,
@@ -31,6 +28,9 @@ from contract.contract import (
     Trigger,
     WorkloadManifest,
 )
+from teleport.core.context import Context
+from teleport.core.settings import Prefs, Settings
+from teleport.orchestration.service import OrchestratorService
 
 
 class FakeClock:
