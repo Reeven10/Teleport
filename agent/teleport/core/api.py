@@ -6,12 +6,13 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from contract.contract import (
     DecisionLog,
     DeviceInfo,
     FeasibilityResult,
+    MigrationMetrics,
     MigrationStatus,
     RemoteSession,
     Stats,
@@ -45,6 +46,10 @@ class MigrationRequest(BaseModel):
     trigger: Trigger = "user_command"
 
 
+class PrecopyRequest(BaseModel):
+    targetId: str
+
+
 class RemoteStartRequest(BaseModel):
     workloadId: str
     viewerId: str
@@ -60,6 +65,10 @@ class PrefsUpdate(BaseModel):
     batteryLowPct: float | None = None
     cpuHighPct: float | None = None
     memHighPct: float | None = None
+    chunkSizeKb: int | None = None
+    precopyIntervalS: float | None = None
+    precopyTargetId: str | None = None
+    leaseSyncS: float | None = None
 
 
 def build_router(ctx: Context) -> APIRouter:
@@ -116,7 +125,13 @@ def build_router(ctx: Context) -> APIRouter:
 
     @r.put("/settings")
     async def put_settings(update: PrefsUpdate) -> Prefs:
-        ctx.prefs = ctx.prefs.model_copy(update=update.model_dump(exclude_none=True))
+        try:
+            ctx.prefs = Prefs.model_validate(
+                {**ctx.prefs.model_dump(), **update.model_dump(exclude_none=True)}
+            )
+        except ValidationError as e:
+            problems = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors())
+            raise HTTPException(422, problems) from None
         ctx.prefs.save(ctx.settings.home)
         return ctx.prefs
 
@@ -140,6 +155,18 @@ def build_router(ctx: Context) -> APIRouter:
         find_workload(req.workloadId)
         find_device(req.targetId)
         return await ctx.migration.start(req.workloadId, req.targetId, req.trigger)
+
+    @r.get("/migrations/{migration_id}/metrics")
+    async def migration_metrics(migration_id: str) -> MigrationMetrics:
+        if (metrics := ctx.migration.metrics(migration_id)) is None:
+            raise HTTPException(404, f"unknown migration {migration_id}")
+        return metrics
+
+    @r.post("/workloads/{workload_id}/precopy")
+    async def workload_precopy(workload_id: str, req: PrecopyRequest) -> MigrationMetrics:
+        find_workload(workload_id)
+        find_device(req.targetId)
+        return await ctx.migration.precopy(workload_id, req.targetId)
 
     @r.post("/migrations/{migration_id}/abort")
     async def migration_abort(migration_id: str) -> MigrationStatus:

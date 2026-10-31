@@ -7,6 +7,8 @@ import asyncio
 import base64
 import builtins
 import contextlib
+import json
+import random
 import time
 import uuid
 from collections.abc import Callable
@@ -111,6 +113,13 @@ class MockPeerLink:
             end.is_cut = True
             lost = DeviceLostEvent(deviceId=end.peer.ctx.device_id)
             asyncio.get_running_loop().create_task(end.ctx.bus.publish(lost))
+
+    def reconnect(self, ctx: Context) -> MockPeerLink:
+        """The agent behind the other end restarted with `ctx`: a fresh end, attached to this one."""
+        fresh = MockPeerLink(ctx)
+        fresh.other, self.other = self, fresh
+        self.is_cut = False
+        return fresh
 
     def cut_after(self, n: int, kind: type = MigChunk) -> None:
         """Cut the link when the n-th message of `kind` is sent."""
@@ -232,7 +241,11 @@ class World:
 
 
 class FakeWorkloadHost:
-    """Stands in for WorkloadRunner. State: `counter` advances on tick(); other checkpoints are static."""
+    """Stands in for WorkloadRunner. State: `counter` advances on tick(); other checkpoints are static.
+
+    Like the real runner it persists its registry and which workloads run (fake_host.json), so a
+    host built on the same TELEPORT_HOME after a "crash" knows them and kills the orphans.
+    """
 
     def __init__(self, ctx: Context, world: World) -> None:
         self.ctx = ctx
@@ -245,10 +258,35 @@ class FakeWorkloadHost:
         self.restored_count: dict[str, int] = {}
         self.fail_start = False
         self.start_delay = 0.0
+        self.blobs: dict[str, int] = {}  # checkpoint id -> size of a deterministic binary state
+        self.dead = False
+        self._file = ctx.settings.home / "fake_host.json"
+        self._interrupted: set[str] = set()
+        if self._file.exists():
+            saved = json.loads(self._file.read_text())
+            for wid, m in saved["manifests"].items():
+                self.manifests[wid] = WorkloadManifest.model_validate(m)
+                self.sources[wid] = Path(saved["sources"][wid])
+                self.states[wid] = "idle"
+            self._interrupted = set(saved["running"])
+
+    def _save(self) -> None:
+        self._file.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "manifests": {w: m.model_dump() for w, m in self.manifests.items()},
+            "sources": {w: str(p) for w, p in self.sources.items()},
+            "running": sorted(w for w, s in self.states.items() if s in ("running", "paused")),
+        }
+        self._file.write_text(json.dumps(data))
 
     def _set(self, wid: str, state: RunState) -> None:
+        assert not self.dead, "a crashed agent's host must not act"
         self.states[wid] = state
         self.world.set(wid, self.ctx.device_id, state == "running")
+        self._save()
+
+    def interrupted(self) -> set[str]:
+        return set(self._interrupted)
 
     def tick(self, wid: str, n: int = 1) -> None:
         assert self.states.get(wid) == "running", "a paused or stopped copy must not make progress"
@@ -264,6 +302,7 @@ class FakeWorkloadHost:
         self.manifests[manifest.id] = manifest
         self.sources[manifest.id] = source_dir
         self.states.setdefault(manifest.id, "idle")
+        self._save()
 
     def status(self, workload_id: str) -> WorkloadRun:
         if workload_id not in self.manifests:
@@ -309,9 +348,11 @@ class FakeWorkloadHost:
     ) -> builtins.list[CheckpointRecord]:
         if self.states.get(workload_id) == "running":  # the SDK only answers while running
             for ck in self.manifests[workload_id].checkpoints:
-                state: dict[str, object] = {"id": ck.id, "static": True}
+                state: dict[str, object] | bytes = {"id": ck.id, "static": True}
                 if ck.id == "counter":
                     state = {"count": self.counts.get(workload_id, 0)}
+                elif ck.id in self.blobs:
+                    state = random.Random(ck.id).randbytes(self.blobs[ck.id])
                 self.store.put(workload_id, ck.id, pack_unit(state))
         return self.store.records(workload_id)
 
@@ -326,7 +367,8 @@ class FakeWorkloadHost:
         return builtins.list(self.manifests.values())
 
     async def startup(self) -> None:
-        pass
+        for wid in self._interrupted:  # the previous agent's processes do not survive the restart
+            self.world.set(wid, self.ctx.device_id, False)
 
     async def shutdown(self) -> None:
         pass

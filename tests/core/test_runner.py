@@ -18,7 +18,7 @@ import pytest
 import uvicorn
 from teleport_sdk.unit import decode_state, unpack_unit
 
-from teleport.core import Context, Settings, create_app
+from teleport.core import Context, Settings, build_context, create_app
 
 REPO = Path(__file__).resolve().parents[2]
 COUNTER_JOB = REPO / "tests" / "fixtures" / "counter_job"
@@ -152,3 +152,18 @@ def test_counter_job_runs_standalone(tmp_path: Path) -> None:
     env["COUNTER_TARGET"] = "999"  # ignored: config comes back from the checkpoint
     second = subprocess.run(cmd, cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
     assert "resumed count=3 runs=2" in second.stdout and "done count=3" in second.stdout
+
+
+async def test_restarted_agent_knows_its_workloads_and_kills_orphans(live: Live) -> None:
+    ctx = live.ctx
+    await launch(live)
+    await wait_for(lambda: saved_count(ctx) >= 2, what="first counts")
+    pid = ctx.workloads.status(WID).pid
+    assert pid is not None
+
+    # A second agent on the same TELEPORT_HOME, as after a crash of the first one.
+    restarted = build_context(ctx.settings)
+    assert [m.id for m in restarted.workloads.list()] == [WID]  # registry survived
+    await restarted.workloads.startup()
+    assert restarted.workloads.interrupted() == {WID}
+    await wait_for(lambda: not psutil.pid_exists(pid), what="the orphaned job to be killed")

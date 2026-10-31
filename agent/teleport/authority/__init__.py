@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
+from typing import Literal
 
 from contract.contract import Authority, AuthorityChangeEvent
 
@@ -18,6 +19,26 @@ from ..core.context import Context
 
 class AuthorityError(ValueError):
     pass
+
+
+Verdict = Literal["none", "learn", "stop_local", "stop_remote"]
+
+
+def _runs(lease: Authority, device_id: str) -> bool:
+    return lease.holder == device_id and lease.state in ("SOURCE", "TARGET")
+
+
+def resolve(local: Authority, remote: Authority, me: str, peer: str) -> Verdict:
+    """Compare this device's lease with a peer's for the same workload. Both sides compute the same
+    answer: when both think they may run, the higher epoch wins; on equal epochs TARGET beats
+    SOURCE, then the smaller device id wins. "learn": the peer knows a newer state, take it."""
+    if _runs(local, me) and _runs(remote, peer):
+        mine = (local.epoch, local.state == "TARGET", me < peer)
+        theirs = (remote.epoch, remote.state == "TARGET", peer < me)
+        return "stop_remote" if mine > theirs else "stop_local"
+    if not _runs(local, me) and remote.epoch > local.epoch:
+        return "learn"
+    return "none"
 
 
 class AuthorityStore:
@@ -36,6 +57,15 @@ class AuthorityStore:
         return self._leases.get(workload_id) or Authority(
             workloadId=workload_id, holder=None, epoch=0, state="SOURCE"
         )
+
+    def leases(self) -> list[Authority]:
+        return list(self._leases.values())
+
+    async def adopt(self, lease: Authority) -> Authority:
+        cur = self.get(lease.workloadId)
+        if lease.epoch < cur.epoch:
+            raise AuthorityError(f"refusing older lease {lease.epoch} < {cur.epoch} for {lease.workloadId}")
+        return await self._set(lease)
 
     def may_run(self, workload_id: str) -> bool:
         lease = self.get(workload_id)

@@ -8,10 +8,17 @@ from pathlib import Path
 from typing import Any
 
 import psutil
+import pytest
 import yaml
 
+import teleport.transport
 from tests.migration.e2e.conftest import AgentFactory
 from tests.migration.e2e.harness import COUNTER_JOB, Agent, EventStream, pair, wait_until
+
+pytestmark = pytest.mark.skipif(
+    hasattr(teleport.transport, "StubPeerLink"),
+    reason="needs the real P2/P3/P4 modules from main (this branch still has the P1 stubs)",
+)
 
 WID = "counter-job"
 USER_CHECKPOINTS = {"config", "counter", "history", "stats", "journal", "meta"}

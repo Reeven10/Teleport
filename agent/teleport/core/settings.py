@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 Mode = Literal["recommend", "auto"]
 
@@ -50,6 +50,14 @@ class Prefs(BaseModel):
     batteryLowPct: float = 20
     cpuHighPct: float = 90
     memHighPct: float = 90
+    # Migration transfer. Chunks travel base64 in one peer frame, so keep them well under 1 MiB.
+    chunkSizeKb: int = Field(256, ge=16, le=512)
+    # Pre-copy: every N seconds send changed checkpoints of running workloads ahead (0 = off) to
+    # precopyTargetId, or to the first connected peer when it is empty.
+    precopyIntervalS: float = Field(0, ge=0)
+    precopyTargetId: str = ""
+    # How often leases are exchanged with connected peers (split-brain guard).
+    leaseSyncS: float = Field(5, ge=0.1, le=300)
 
     @classmethod
     def load(cls, home: Path) -> Prefs:
