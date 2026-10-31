@@ -1,0 +1,14 @@
+# Owned by P1. Standard library only, so any workload can `pip install -e sdk`.
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "teleport-sdk"
+version = "0.1.0"
+description = "Teleport workload SDK: checkpoint, restore, fence and cooperative stop"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["teleport_sdk"]

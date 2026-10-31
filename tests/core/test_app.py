@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -58,22 +57,10 @@ def test_rest_routes(client: TestClient, tmp_path: Path) -> None:
     assert client.put("/api/settings", json={"mode": "auto"}).json()["mode"] == "auto"
     assert client.post("/api/pair", json={"addr": "x", "pin": "1"}).status_code == 501
 
-    manifest = {
-        "id": "w1",
-        "name": "demo",
-        "command": "python app.py",
-        "runtime": {"name": "python", "minVersion": "3.11"},
-        "arch": ["x86_64"],
-        "os": ["linux"],
-        "minRamMb": 100,
-        "minCpuCores": 1,
-        "minDiskMb": 10,
-        "needsGpu": False,
-        "libs": [],
-        "checkpoints": [{"id": "c1", "name": "config", "paths": ["config.json"]}],
-        "remoteCapable": True,
-    }
-    path = tmp_path / "w1.json"
-    path.write_text(json.dumps(manifest))
-    assert client.post("/api/workloads/start", json={"manifestPath": str(path)}).json()["id"] == "w1"
-    assert [w["id"] for w in client.get("/api/workloads").json()] == ["w1"]
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / "teleport.yaml").write_text("name: x\n")
+    res = client.post("/api/workloads/start", json={"manifestPath": str(bad)})
+    assert res.status_code == 400 and "command: Field required" in res.json()["problems"]
+    assert client.post("/api/workloads/start", json={"manifestPath": "nope/"}).status_code == 404
+    assert client.get("/api/workloads").json() == []

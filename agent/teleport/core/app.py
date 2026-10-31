@@ -16,9 +16,14 @@ from fastapi.staticfiles import StaticFiles
 from contract.contract import Service
 
 from .. import __version__
+from ..authority import AuthorityError
+from ..migration import MigrationError
 from .api import build_router
 from .context import Context
+from .manifest import ManifestError
+from .sdk_api import build_sdk_router
 from .settings import Prefs, Settings, load_device_id, load_sim_profile
+from .workloads import WorkloadError
 
 log = logging.getLogger("teleport")
 
@@ -55,6 +60,10 @@ def build_context(settings: Settings | None = None) -> Context:
         sim_profile=load_sim_profile(settings.simProfile),
         prefs=Prefs.load(settings.home),
     )
+    from ..migration.store import CheckpointStore
+    from .workloads import WorkloadRunner
+
+    ctx.register("workloads", WorkloadRunner(ctx, CheckpointStore(settings.home)))
     for name, create in _entry_points():
         ctx.register(name, create(ctx))
     return ctx
@@ -92,11 +101,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(ManifestError)
+    async def bad_manifest(_: Request, exc: ManifestError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc), "problems": exc.problems}, status_code=400)
+
+    @app.exception_handler(FileNotFoundError)
+    async def not_found(_: Request, exc: FileNotFoundError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=404)
+
+    @app.exception_handler(AuthorityError)
+    async def authority_error(_: Request, exc: AuthorityError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+
+    @app.exception_handler(MigrationError)
+    async def migration_error(_: Request, exc: MigrationError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+
+    @app.exception_handler(WorkloadError)
+    async def workload_error(_: Request, exc: WorkloadError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+
     @app.exception_handler(NotImplementedError)
     async def not_implemented(_: Request, exc: NotImplementedError) -> JSONResponse:
         return JSONResponse({"detail": str(exc) or "not implemented yet"}, status_code=501)
 
     app.include_router(build_router(ctx))
+    app.include_router(build_sdk_router(ctx))
 
     @app.websocket("/ws/events")
     async def ws_events(ws: WebSocket) -> None:

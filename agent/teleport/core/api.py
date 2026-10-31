@@ -17,6 +17,7 @@ from contract.contract import (
     Stats,
     Trigger,
     WorkloadManifest,
+    WorkloadRun,
 )
 
 from .. import __version__
@@ -65,13 +66,13 @@ def build_router(ctx: Context) -> APIRouter:
     r = APIRouter(prefix="/api")
 
     def find_device(device_id: str) -> DeviceInfo:
-        for d in ctx.devices.list_devices():
+        for d in [*ctx.devices.list_devices(), *ctx.peers.list_peers()]:
             if d.id == device_id:
                 return d
         raise HTTPException(404, f"unknown device {device_id}")
 
     def find_workload(workload_id: str) -> WorkloadManifest:
-        for w in ctx.migration.workloads():
+        for w in ctx.workloads.list():
             if w.id == workload_id:
                 return w
         raise HTTPException(404, f"unknown workload {workload_id}")
@@ -99,11 +100,15 @@ def build_router(ctx: Context) -> APIRouter:
 
     @r.get("/workloads")
     async def workloads() -> list[WorkloadManifest]:
-        return ctx.migration.workloads()
+        return ctx.workloads.list()
+
+    @r.get("/workloads/runs")
+    async def workload_runs() -> list[WorkloadRun]:
+        return ctx.workloads.runs()
 
     @r.post("/workloads/start")
     async def workload_start(req: WorkloadStartRequest) -> WorkloadManifest:
-        return await ctx.migration.launch_workload(req.manifestPath)
+        return await ctx.workloads.launch(req.manifestPath)
 
     @r.get("/settings")
     async def get_settings() -> Prefs:

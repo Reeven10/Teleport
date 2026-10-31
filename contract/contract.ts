@@ -5,6 +5,7 @@ export type LinkType = 'wifi' | 'cable' | 'loopback';
 export type Decision = 'MIGRATE' | 'REMOTE_ACCESS' | 'STAY';
 export type Trigger = 'low_battery' | 'cpu_pressure' | 'memory_pressure' | 'connectivity_lost' | 'predicted' | 'user_command';
 export type AuthorityState = 'SOURCE' | 'FENCED' | 'TARGET';
+export type RunState = 'idle' | 'running' | 'paused' | 'stopped' | 'exited';
 export type Phase = 'IDLE' | 'CONNECTING' | 'EVALUATING' | 'TRANSFERRING' | 'VALIDATING' | 'FENCING' | 'STARTING_TARGET' | 'COMPLETED' | 'ROLLING_BACK' | 'ROLLED_BACK' | 'REMOTE_ACCESS' | 'FAILED';
 
 export interface DeviceInfo { id: string; name: string; os: OsName; arch: Arch; cpuCores: number; ramMb: number; gpu: string | null; diskFreeMb: number; runtimes: Record<string, string>; libs: string[]; addrs: { addr: string; link: LinkType }[]; agentVersion: string; simulated?: boolean }
@@ -19,6 +20,7 @@ export interface Authority { workloadId: string; holder: string | null; epoch: n
 export interface MigrationStatus { id: string; workloadId: string; sourceId: string; targetId: string; phase: Phase; trigger: Trigger; link: LinkType; decision?: Decision; reasons: Reason[]; checkpoints: CheckpointRecord[]; bytesTotal: number; bytesDone: number; authority: Authority; interruptionMs?: number; error?: string; startedAt: number; endedAt?: number }
 export interface Recommendation { workloadId: string; trigger: Trigger; targetId: string | null; decision: Decision; reasons: Reason[]; auto: boolean; ts: number }
 export interface RemoteSession { id: string; workloadId: string; hostId: string; viewerId: string; consent: boolean; fps: number; ts: number }
+export interface WorkloadRun { workloadId: string; state: RunState; pid: number | null; exitCode: number | null; startedAt: number | null; restored: string[]; logTail: string[] }
 export interface DecisionLog { id: string; ts: number; workloadId: string; trigger: Trigger; decision: Decision; reasons: Reason[]; migrationId?: string }
 
 // Peer link messages (device to device, always encrypted)
@@ -48,6 +50,7 @@ export type BusEvent =
   | { t: 'authority.change'; authority: Authority }
   | { t: 'remote.session'; session: RemoteSession };
 
-// REST: GET /api/health, /api/devices, /api/stats, /api/workloads, /api/settings, /api/history/devices, /api/history/migrations, /api/history/decisions, /api/migrations
+// REST: GET /api/health, /api/devices, /api/stats, /api/workloads (WorkloadManifest[]), /api/workloads/runs (WorkloadRun[]), /api/settings, /api/history/devices, /api/history/migrations, /api/history/decisions, /api/migrations
 // POST /api/pair {addr, pin}, /api/workloads/start {manifestPath}, /api/feasibility {workloadId, targetId}, /api/migrations {workloadId, targetId, trigger}, /api/migrations/{id}/abort, /api/remote/start {workloadId, viewerId}, /api/dev/stats-override {deviceId, stats | null}; PUT /api/settings
+// Agent-local SDK API (127.0.0.1, Authorization: Bearer <per-run token>), used by sdk/teleport_sdk: POST /api/sdk/workloads/{id}/checkpoints/{checkpointId} (tar.gz unit), GET /api/sdk/workloads/{id}/control {fenceSeq, stop}, POST /api/sdk/workloads/{id}/fenced {fenceSeq}
 // WebSocket: /ws/events (BusEvent as JSON), /ws/remote/{sessionId} (binary JPEG frames out, JSON input events in)

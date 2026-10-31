@@ -34,6 +34,7 @@ Trigger = Literal[
     "low_battery", "cpu_pressure", "memory_pressure", "connectivity_lost", "predicted", "user_command"
 ]
 AuthorityState = Literal["SOURCE", "FENCED", "TARGET"]
+RunState = Literal["idle", "running", "paused", "stopped", "exited"]
 Phase = Literal[
     "IDLE",
     "CONNECTING",
@@ -214,6 +215,16 @@ class RemoteSession(ContractModel):
     consent: bool
     fps: float
     ts: float
+
+
+class WorkloadRun(ContractModel):
+    workloadId: str
+    state: RunState
+    pid: int | None
+    exitCode: int | None
+    startedAt: float | None
+    restored: list[str]
+    logTail: list[str]
 
 
 class DecisionLog(ContractModel):
@@ -498,23 +509,34 @@ class HistoryStore(Service, Protocol):
 
 @runtime_checkable
 class AuthorityService(Service, Protocol):
-    """P1. One lease per workload. Publishes authority.change on every transition."""
+    """P1. One lease per workload, this device's view, persisted in TELEPORT_HOME/authority.json.
+
+    Epochs only grow. Publishes authority.change on every transition.
+    """
 
     def get(self, workload_id: str) -> Authority: ...
+    def may_run(self, workload_id: str) -> bool:
+        """True only if this device holds the lease in state SOURCE or TARGET."""
+        ...
+
     async def claim(self, workload_id: str, holder: str) -> Authority:
-        """Become SOURCE for a workload this device starts locally (epoch kept, or 0 if new)."""
+        """Become SOURCE for a workload started locally (epoch kept, 0 if new)."""
         ...
 
     async def fence(self, workload_id: str) -> Authority:
-        """SOURCE -> FENCED, epoch + 1."""
+        """SOURCE -> FENCED, epoch + 1. Only the holder may fence."""
         ...
 
     async def grant(self, workload_id: str, holder: str, epoch: int) -> Authority:
-        """Become/record TARGET holder at `epoch`; rejects an epoch older than the current one."""
+        """Record `holder` as TARGET at `epoch`. Raises if `epoch` is older than the current one."""
+        ...
+
+    async def release(self, workload_id: str) -> Authority:
+        """This device gives the lease up (holder None, epoch kept)."""
         ...
 
     async def rollback(self, workload_id: str) -> Authority:
-        """FENCED -> SOURCE."""
+        """FENCED -> SOURCE, epoch + 1 so a target started at the fence epoch is now stale."""
         ...
 
     def check_epoch(self, workload_id: str, epoch: int) -> bool:

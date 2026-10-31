@@ -50,6 +50,27 @@ Agent CLI flags override env: `python -m teleport --port 8766 --home .teleport-d
 Simulated profiles live in `agent/teleport/core/sim_profiles/` and everything they produce is marked `simulated`.
 By default an agent binds 127.0.0.1; set `TELEPORT_HOST=0.0.0.0` for a real two-device setup.
 
+## Workloads and the SDK
+
+A workload is a folder with a `teleport.yaml` (sample: [tests/fixtures/teleport.yaml](tests/fixtures/teleport.yaml))
+and code that uses `teleport_sdk` (in `sdk/`, standard library only):
+
+```python
+import teleport_sdk as teleport
+
+teleport.init()
+state = teleport.restore("counter") or {"count": 0}  # None if never saved
+teleport.on_fence(lambda: teleport.checkpoint("counter", state))  # final checkpoint before cutover
+while not teleport.should_stop():
+    ...
+    teleport.checkpoint("counter", state, files=["out/log.txt"])
+```
+
+Start it with `POST /api/workloads/start {"manifestPath": "tests/fixtures/counter_job"}`. The agent copies
+the folder to `TELEPORT_HOME/workloads/<id>/work`, restores any saved checkpoints, and runs `command` there
+(`python` means the agent's interpreter, with `sdk/` on `PYTHONPATH`). Logs go to `.../logs/run.log`, and
+checkpoints go to `.../checkpoints/<id>/`. Run without an agent, the SDK saves to `./.teleport-local`.
+
 ## Architecture
 
 ```

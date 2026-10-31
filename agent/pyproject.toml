@@ -40,5 +40,5 @@ teleport = "teleport.__main__:main"
 packages = ["teleport"]
 
 [tool.hatch.build]
-# Editable installs put agent/ and the repo root on sys.path so `contract` (repo-root/contract) imports.
-dev-mode-dirs = [".", ".."]
+# Editable installs put agent/, the repo root and sdk/ on sys.path so `contract` and `teleport_sdk` import.
+dev-mode-dirs = [".", "..", "../sdk"]

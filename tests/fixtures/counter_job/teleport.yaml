@@ -1,0 +1,20 @@
+# Tiny demo job: counts up, saves 6 checkpoints, resumes from restore.
+id: counter-job
+name: Counter job
+command: python job.py
+runtime: { name: python, minVersion: "3.11" }
+arch: [x86_64, arm64]
+os: [linux, windows, macos]
+minRamMb: 64
+minCpuCores: 1
+minDiskMb: 10
+needsGpu: false
+libs: []
+remoteCapable: true
+checkpoints:
+  - { id: config, name: Job config, paths: [] }
+  - { id: counter, name: Counter value, paths: [] }
+  - { id: history, name: Recent values, paths: [] }
+  - { id: stats, name: Binary stats blob, paths: [] }
+  - { id: journal, name: Journal file, paths: [out/journal.txt] }
+  - { id: meta, name: Run metadata, paths: [] }
