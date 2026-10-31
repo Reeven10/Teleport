@@ -55,7 +55,8 @@ def test_rest_routes(client: TestClient, tmp_path: Path) -> None:
     assert client.get("/api/devices").status_code == 200
     assert client.get("/api/history/decisions").json() == []
     assert client.put("/api/settings", json={"mode": "auto"}).json()["mode"] == "auto"
-    assert client.post("/api/pair", json={"addr": "x", "pin": "1"}).status_code == 501
+    # 501 with the P1 transport stub, 502 (unreachable) with P2's real peer link.
+    assert client.post("/api/pair", json={"addr": "127.0.0.1:1", "pin": "1"}).status_code in (501, 502)
 
     bad = tmp_path / "bad"
     bad.mkdir()

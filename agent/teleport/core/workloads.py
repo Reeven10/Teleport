@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 import builtins
 import collections
+import contextlib
 import hmac
+import logging
 import os
 import secrets
 import shlex
@@ -23,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import psutil
+from pydantic import BaseModel
 
 from contract.contract import CheckpointRecord, RunState, WorkloadManifest, WorkloadRun
 
@@ -35,8 +38,21 @@ SDK_DIR = REPO_ROOT / "sdk"
 LOG_TAIL = 200
 
 
+log = logging.getLogger("teleport.workloads")
+
+
 class WorkloadError(RuntimeError):
     pass
+
+
+class _Registered(BaseModel):
+    manifest: WorkloadManifest
+    sourceDir: str
+
+
+class _RunFile(BaseModel):
+    pid: int
+    createTime: float
 
 
 @dataclass
@@ -67,8 +83,45 @@ class WorkloadRunner:
         self.ctx = ctx
         self.store = store
         self._runs: dict[str, _Run] = {}
+        self._interrupted: set[str] = set()
+        self._shutting_down = False
+        self._load_registry()
 
     # ------------------------------------------------------------------ registry
+    # Each registered workload is saved to workloads/<id>/workload.json and each running process to
+    # run.json, so a restarted agent knows its workloads and can kill orphans of the old process.
+
+    def _load_registry(self) -> None:
+        if not self.store.root.is_dir():
+            return
+        for path in sorted(self.store.root.glob("*/workload.json")):
+            try:
+                entry = _Registered.model_validate_json(path.read_text("utf-8"))
+            except ValueError as e:
+                log.warning("ignoring %s: %s", path, e)
+                continue
+            self._runs[entry.manifest.id] = _Run(manifest=entry.manifest, source_dir=Path(entry.sourceDir))
+
+    def interrupted(self) -> set[str]:
+        """Workloads that were running when the previous agent process stopped (crash or shutdown)."""
+        return set(self._interrupted)
+
+    def _kill_orphans(self) -> builtins.list[int]:
+        killed: builtins.list[int] = []
+        for path in self.store.root.glob("*/run.json") if self.store.root.is_dir() else []:
+            if path.parent.name in self._runs:
+                self._interrupted.add(path.parent.name)
+            try:
+                info = _RunFile.model_validate_json(path.read_text("utf-8"))
+                proc = psutil.Process(info.pid)
+                if abs(proc.create_time() - info.createTime) < 1.0:  # same process, not a reused pid
+                    for p in [*proc.children(recursive=True), proc]:
+                        p.kill()
+                    killed.append(info.pid)
+            except (ValueError, psutil.Error):
+                pass
+            path.unlink(missing_ok=True)
+        return killed
 
     def list(self) -> list[WorkloadManifest]:
         return [r.manifest for r in self._runs.values()]
@@ -86,6 +139,10 @@ class WorkloadRunner:
         if self.store.root.resolve().is_relative_to(source_dir.resolve()):
             raise WorkloadError(f"workload folder {source_dir} must not contain TELEPORT_HOME")
         self._runs[manifest.id] = _Run(manifest=manifest, source_dir=source_dir)
+        folder = self.store.workload_dir(manifest.id)
+        folder.mkdir(parents=True, exist_ok=True)
+        entry = _Registered(manifest=manifest, sourceDir=str(source_dir.resolve()))
+        (folder / "workload.json").write_text(entry.model_dump_json(), "utf-8")
 
     async def launch(self, manifest_path: str) -> WorkloadManifest:
         """Load teleport.yaml (file or folder), register it, claim authority and start it."""
@@ -109,6 +166,8 @@ class WorkloadRunner:
             if code is not None:
                 run.exit_code = code
                 run.state = "stopped" if run.stop_requested else "exited"
+                if not self._shutting_down:  # it ended for good: do not relaunch after a restart
+                    (self.store.workload_dir(run.manifest.id) / "run.json").unlink(missing_ok=True)
 
     def workdir(self, workload_id: str) -> Path:
         return self.store.workload_dir(workload_id) / "work"
@@ -172,6 +231,9 @@ class WorkloadRunner:
             start_new_session=sys.platform != "win32",
         )
         run.state, run.exit_code, run.started_at = "running", None, time.time()
+        with contextlib.suppress(psutil.Error):
+            created = psutil.Process(run.proc.pid).create_time()
+            (wdir / "run.json").write_text(_RunFile(pid=run.proc.pid, createTime=created).model_dump_json())
         run.stop_requested, run.fence_seq, run.fenced_seq = False, 0, 0
         run.log_tail.clear()
         threading.Thread(target=self._pump_logs, args=(run, logs / "run.log"), daemon=True).start()
@@ -294,7 +356,11 @@ class WorkloadRunner:
         run.fenced_seq = max(run.fenced_seq, min(seq, run.fence_seq))
 
     async def startup(self) -> None:
-        pass
+        if killed := self._kill_orphans():
+            log.warning(
+                "killed %d workload process(es) left over from a previous agent: %s", len(killed), killed
+            )
 
     async def shutdown(self) -> None:
+        self._shutting_down = True  # keep run.json: workloads stopped by shutdown resume on restart
         await asyncio.gather(*(self.terminate(wid, grace=2.0) for wid in list(self._runs)))

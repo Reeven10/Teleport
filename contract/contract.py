@@ -177,6 +177,43 @@ class Authority(ContractModel):
     state: AuthorityState
 
 
+class CheckpointMetric(ContractModel):
+    id: str
+    stage: Literal["initial", "delta", "precopy"]
+    sizeBytes: int
+    chunks: int
+    retries: int
+    transferMs: float
+    mbps: float
+    skipped: bool
+
+
+class MigrationMetrics(ContractModel):
+    migrationId: str
+    link: LinkType
+    chunkSize: int
+    durationMs: float
+    interruptionMs: float | None = None
+    bytesTotal: int
+    bytesDone: int
+    bytesSkipped: int
+    throughputMbps: float
+    checkpoints: list[CheckpointMetric]
+    ts: float
+
+
+class AuthorityConflict(ContractModel):
+    workloadId: str
+    deviceId: str
+    peerId: str
+    localEpoch: int
+    remoteEpoch: int
+    winner: str
+    stopped: str
+    reason: str
+    ts: float
+
+
 class MigrationStatus(ContractModel):
     id: str
     workloadId: str
@@ -195,6 +232,7 @@ class MigrationStatus(ContractModel):
     error: str | None = None
     startedAt: float
     endedAt: float | None = None
+    metrics: MigrationMetrics | None = None
 
 
 class Recommendation(ContractModel):
@@ -267,6 +305,8 @@ class MigPrepare(ContractModel):
     checkpoints: list[CheckpointRecord]
     epoch: int
     signature: str
+    chunkSize: int | None = None
+    precopy: bool | None = None
 
 
 class MigReady(ContractModel):
@@ -274,6 +314,7 @@ class MigReady(ContractModel):
     migrationId: str
     ok: bool
     reasons: list[Reason]
+    have: list[str] | None = None
 
 
 class MigChunk(ContractModel):
@@ -333,6 +374,11 @@ class MigAbort(ContractModel):
     reason: str
 
 
+class AuthLeases(ContractModel):
+    t: Literal["auth.leases"] = "auth.leases"
+    leases: list[Authority]
+
+
 PeerMessage = Annotated[
     (
         PeerHello
@@ -349,6 +395,7 @@ PeerMessage = Annotated[
         | MigStart
         | MigStarted
         | MigAbort
+        | AuthLeases
     ),
     Field(discriminator="t"),
 ]
@@ -403,6 +450,11 @@ class RemoteSessionEvent(ContractModel):
     session: RemoteSession
 
 
+class AuthorityConflictEvent(ContractModel):
+    t: Literal["authority.conflict"] = "authority.conflict"
+    conflict: AuthorityConflict
+
+
 BusEvent = Annotated[
     (
         StatsUpdateEvent
@@ -414,6 +466,7 @@ BusEvent = Annotated[
         | MigrationStatusEvent
         | AuthorityChangeEvent
         | RemoteSessionEvent
+        | AuthorityConflictEvent
     ),
     Field(discriminator="t"),
 ]
@@ -515,6 +568,14 @@ class AuthorityService(Service, Protocol):
     """
 
     def get(self, workload_id: str) -> Authority: ...
+    def leases(self) -> builtins.list[Authority]:
+        """Every lease this device knows (sent to peers for the split-brain check)."""
+        ...
+
+    async def adopt(self, lease: Authority) -> Authority:
+        """Take a peer's view of a lease (after a handover or a lost conflict). Epochs never go down."""
+        ...
+
     def may_run(self, workload_id: str) -> bool:
         """True only if this device holds the lease in state SOURCE or TARGET."""
         ...
@@ -557,6 +618,11 @@ class MigrationManager(Service, Protocol):
     async def start(self, workload_id: str, target_id: str, trigger: Trigger) -> MigrationStatus: ...
     async def abort(self, migration_id: str) -> MigrationStatus: ...
     def status(self, migration_id: str) -> MigrationStatus | None: ...
+    def metrics(self, migration_id: str) -> MigrationMetrics | None: ...
+    async def precopy(self, workload_id: str, target_id: str) -> MigrationMetrics:
+        """Send changed checkpoints to `target_id` ahead of time; no authority change."""
+        ...
+
     def list(self) -> builtins.list[MigrationStatus]: ...
 
 

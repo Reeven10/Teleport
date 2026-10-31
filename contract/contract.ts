@@ -17,7 +17,10 @@ export interface CheckpointRecord { id: string; seq: number; sizeBytes: number; 
 export interface Reason { code: string; severity: 'pass' | 'warn' | 'block'; text: string }
 export interface FeasibilityResult { workloadId: string; sourceId: string; targetId: string; decision: Decision; reasons: Reason[]; estTransferSec: number; estInterruptionMs: number; ts: number }
 export interface Authority { workloadId: string; holder: string | null; epoch: number; state: AuthorityState }
-export interface MigrationStatus { id: string; workloadId: string; sourceId: string; targetId: string; phase: Phase; trigger: Trigger; link: LinkType; decision?: Decision; reasons: Reason[]; checkpoints: CheckpointRecord[]; bytesTotal: number; bytesDone: number; authority: Authority; interruptionMs?: number; error?: string; startedAt: number; endedAt?: number }
+export interface MigrationStatus { id: string; workloadId: string; sourceId: string; targetId: string; phase: Phase; trigger: Trigger; link: LinkType; decision?: Decision; reasons: Reason[]; checkpoints: CheckpointRecord[]; bytesTotal: number; bytesDone: number; authority: Authority; interruptionMs?: number; error?: string; startedAt: number; endedAt?: number; metrics?: MigrationMetrics }
+export interface CheckpointMetric { id: string; stage: 'initial' | 'delta' | 'precopy'; sizeBytes: number; chunks: number; retries: number; transferMs: number; mbps: number; skipped: boolean }
+export interface MigrationMetrics { migrationId: string; link: LinkType; chunkSize: number; durationMs: number; interruptionMs?: number; bytesTotal: number; bytesDone: number; bytesSkipped: number; throughputMbps: number; checkpoints: CheckpointMetric[]; ts: number }
+export interface AuthorityConflict { workloadId: string; deviceId: string; peerId: string; localEpoch: number; remoteEpoch: number; winner: string; stopped: string; reason: string; ts: number }
 export interface Recommendation { workloadId: string; trigger: Trigger; targetId: string | null; decision: Decision; reasons: Reason[]; auto: boolean; ts: number }
 export interface RemoteSession { id: string; workloadId: string; hostId: string; viewerId: string; consent: boolean; fps: number; ts: number }
 export interface WorkloadRun { workloadId: string; state: RunState; pid: number | null; exitCode: number | null; startedAt: number | null; restored: string[]; logTail: string[] }
@@ -28,8 +31,8 @@ export type PeerMessage =
   | { t: 'peer.hello'; device: DeviceInfo }
   | { t: 'peer.stats'; stats: Stats }
   | { t: 'peer.ping'; n: number } | { t: 'peer.pong'; n: number }
-  | { t: 'mig.prepare'; migrationId: string; manifest: WorkloadManifest; checkpoints: CheckpointRecord[]; epoch: number; signature: string }
-  | { t: 'mig.ready'; migrationId: string; ok: boolean; reasons: Reason[] }
+  | { t: 'mig.prepare'; migrationId: string; manifest: WorkloadManifest; checkpoints: CheckpointRecord[]; epoch: number; signature: string; chunkSize?: number; precopy?: boolean }
+  | { t: 'mig.ready'; migrationId: string; ok: boolean; reasons: Reason[]; have?: string[] }
   | { t: 'mig.chunk'; migrationId: string; checkpointId: string; index: number; total: number; dataB64: string; sha256: string; epoch: number }
   | { t: 'mig.chunkAck'; migrationId: string; checkpointId: string; index: number; ok: boolean }
   | { t: 'mig.validated'; migrationId: string; ok: boolean; failed?: string[] }
@@ -37,7 +40,8 @@ export type PeerMessage =
   | { t: 'mig.fenced'; migrationId: string; changed: CheckpointRecord[] }
   | { t: 'mig.start'; migrationId: string; epoch: number }
   | { t: 'mig.started'; migrationId: string; ok: boolean; error?: string }
-  | { t: 'mig.abort'; migrationId: string; reason: string };
+  | { t: 'mig.abort'; migrationId: string; reason: string }
+  | { t: 'auth.leases'; leases: Authority[] };
 
 // Event bus (inside one agent) and the /ws/events stream
 export type BusEvent =
@@ -48,9 +52,10 @@ export type BusEvent =
   | { t: 'decision.logged'; log: DecisionLog }
   | { t: 'migration.status'; status: MigrationStatus }
   | { t: 'authority.change'; authority: Authority }
-  | { t: 'remote.session'; session: RemoteSession };
+  | { t: 'remote.session'; session: RemoteSession }
+  | { t: 'authority.conflict'; conflict: AuthorityConflict };
 
-// REST: GET /api/health, /api/devices, /api/stats, /api/workloads (WorkloadManifest[]), /api/workloads/runs (WorkloadRun[]), /api/settings, /api/history/devices, /api/history/migrations, /api/history/decisions, /api/migrations
-// POST /api/pair {addr, pin}, /api/workloads/start {manifestPath}, /api/feasibility {workloadId, targetId}, /api/migrations {workloadId, targetId, trigger}, /api/migrations/{id}/abort, /api/remote/start {workloadId, viewerId}, /api/dev/stats-override {deviceId, stats | null}; PUT /api/settings
+// REST: GET /api/health, /api/devices, /api/stats, /api/workloads (WorkloadManifest[]), /api/workloads/runs (WorkloadRun[]), /api/settings, /api/history/devices, /api/history/migrations, /api/history/decisions, /api/migrations, /api/migrations/{id}/metrics (MigrationMetrics)
+// POST /api/pair {addr, pin}, /api/workloads/start {manifestPath}, /api/feasibility {workloadId, targetId}, /api/migrations {workloadId, targetId, trigger}, /api/migrations/{id}/abort, /api/workloads/{id}/precopy {targetId}, /api/remote/start {workloadId, viewerId}, /api/dev/stats-override {deviceId, stats | null}; PUT /api/settings
 // Agent-local SDK API (127.0.0.1, Authorization: Bearer <per-run token>), used by sdk/teleport_sdk: POST /api/sdk/workloads/{id}/checkpoints/{checkpointId} (tar.gz unit), GET /api/sdk/workloads/{id}/control {fenceSeq, stop}, POST /api/sdk/workloads/{id}/fenced {fenceSeq}
 // WebSocket: /ws/events (BusEvent as JSON), /ws/remote/{sessionId} (binary JPEG frames out, JSON input events in)

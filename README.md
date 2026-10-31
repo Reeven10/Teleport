@@ -40,6 +40,7 @@ For `npm run e2e`, also run `npx playwright install chromium` once.
 | `npm run dev:ui` | UI dev server only (proxies `/api` and `/ws` to `TELEPORT_AGENT`, default A) |
 | `npm run build` | Typecheck and build the UI into `ui/dist` (the agent serves it at `/`) |
 | `npm test` | pytest (`tests/`) |
+| `node scripts/py.mjs -m pytest tests/migration/e2e` | Integration scenarios 1 to 4 with real agents (pair, migrate, remote access, target crash) |
 | `npm run test:ui` | Vitest (`ui/src/**/*.test.tsx`, `tests/ui/**/*.test.tsx`) |
 | `npm run e2e` | Playwright (`tests/ui/e2e`) |
 | `npm run typecheck` | mypy strict + `tsc` strict |
@@ -48,6 +49,7 @@ For `npm run e2e`, also run `npx playwright install chromium` once.
 The UI on :5173 talks to agent A. Open `http://localhost:5173/?agent=http://127.0.0.1:8766` to view B.
 Agent CLI flags override env: `python -m teleport --port 8766 --home .teleport-dev/b --sim-profile arm64-lowspec`.
 Simulated profiles live in `agent/teleport/core/sim_profiles/` and everything they produce is marked `simulated`.
+`TELEPORT_DEV_SLOW_TRANSFER_MS=400` slows each migration chunk down for demos.
 By default an agent binds 127.0.0.1; set `TELEPORT_HOST=0.0.0.0` for a real two-device setup.
 
 ## Workloads and the SDK
