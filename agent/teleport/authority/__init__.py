@@ -1,9 +1,15 @@
 """Authority (P1): single active instance per workload via an epoch-numbered lease.
 
-SOURCE -> FENCED (epoch + 1) -> TARGET; rollback FENCED -> SOURCE. Epochs never decrease.
+Handover SOURCE -> FENCED (epoch + 1) -> TARGET; rollback FENCED -> SOURCE (epoch + 1).
+Epochs never decrease, so anything carrying an older epoch is stale and rejected.
+Each device keeps its own view in TELEPORT_HOME/authority.json.
 """
 
 from __future__ import annotations
+
+import json
+import threading
+from pathlib import Path
 
 from contract.contract import Authority, AuthorityChangeEvent
 
@@ -14,29 +20,52 @@ class AuthorityError(ValueError):
     pass
 
 
-class InMemoryAuthorityService:
+class AuthorityStore:
     def __init__(self, ctx: Context) -> None:
         self.ctx = ctx
+        self.path: Path = ctx.settings.home / "authority.json"
+        self._lock = threading.Lock()
         self._leases: dict[str, Authority] = {}
+        if self.path.exists():
+            raw = json.loads(self.path.read_text("utf-8"))
+            self._leases = {k: Authority.model_validate(v) for k, v in raw.items()}
+
+    # ------------------------------------------------------------------ queries
 
     def get(self, workload_id: str) -> Authority:
         return self._leases.get(workload_id) or Authority(
             workloadId=workload_id, holder=None, epoch=0, state="SOURCE"
         )
 
+    def may_run(self, workload_id: str) -> bool:
+        lease = self.get(workload_id)
+        return lease.holder == self.ctx.device_id and lease.state in ("SOURCE", "TARGET")
+
+    def check_epoch(self, workload_id: str, epoch: int) -> bool:
+        return epoch >= self.get(workload_id).epoch
+
+    # ------------------------------------------------------------------ transitions
+
     async def _set(self, lease: Authority) -> Authority:
-        self._leases[lease.workloadId] = lease
+        with self._lock:
+            self._leases[lease.workloadId] = lease
+            data = {k: v.model_dump() for k, v in self._leases.items()}
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2), "utf-8")
+            tmp.replace(self.path)
         await self.ctx.bus.publish(AuthorityChangeEvent(authority=lease))
         return lease
 
     async def claim(self, workload_id: str, holder: str) -> Authority:
         cur = self.get(workload_id)
+        if cur.holder not in (None, holder) and cur.state != "SOURCE":
+            raise AuthorityError(f"{workload_id} is held by {cur.holder} ({cur.state})")
         return await self._set(cur.model_copy(update={"holder": holder, "state": "SOURCE"}))
 
     async def fence(self, workload_id: str) -> Authority:
         cur = self.get(workload_id)
-        if cur.state != "SOURCE":
-            raise AuthorityError(f"cannot fence {workload_id} in state {cur.state}")
+        if cur.state != "SOURCE" or cur.holder != self.ctx.device_id:
+            raise AuthorityError(f"cannot fence {workload_id}: {cur.state} held by {cur.holder}")
         return await self._set(cur.model_copy(update={"state": "FENCED", "epoch": cur.epoch + 1}))
 
     async def grant(self, workload_id: str, holder: str, epoch: int) -> Authority:
@@ -46,19 +75,21 @@ class InMemoryAuthorityService:
         lease = Authority(workloadId=workload_id, holder=holder, epoch=epoch, state="TARGET")
         return await self._set(lease)
 
+    async def release(self, workload_id: str) -> Authority:
+        cur = self.get(workload_id)
+        if cur.holder != self.ctx.device_id:
+            return cur
+        return await self._set(cur.model_copy(update={"holder": None, "state": "SOURCE"}))
+
     async def rollback(self, workload_id: str) -> Authority:
         cur = self.get(workload_id)
         if cur.state != "FENCED":
             raise AuthorityError(f"cannot roll back {workload_id} in state {cur.state}")
-        return await self._set(cur.model_copy(update={"state": "SOURCE"}))
-
-    def check_epoch(self, workload_id: str, epoch: int) -> bool:
-        return epoch >= self.get(workload_id).epoch
+        return await self._set(cur.model_copy(update={"state": "SOURCE", "epoch": cur.epoch + 1}))
 
     async def reconcile(self, remote: Authority) -> bool:
         local = self.get(remote.workloadId)
-        me = self.ctx.device_id
-        if local.holder != me:
+        if local.holder != self.ctx.device_id:
             return False
         newer = remote.epoch > local.epoch
         handed_over = remote.epoch == local.epoch and local.state == "FENCED" and remote.state == "TARGET"
@@ -74,5 +105,5 @@ class InMemoryAuthorityService:
         pass
 
 
-def create_authority_service(ctx: Context) -> InMemoryAuthorityService:
-    return InMemoryAuthorityService(ctx)
+def create_authority_service(ctx: Context) -> AuthorityStore:
+    return AuthorityStore(ctx)

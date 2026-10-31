@@ -4,7 +4,10 @@ extend-exclude = ["node_modules", "ui", ".venv", ".teleport-dev"]
 
 [lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
-ignore = ["ASYNC240"]  # small sync file reads in async code are fine
+ignore = ["ASYNC240", "ASYNC109"]  # small sync file reads and timeout params in async code are fine
 
 [lint.isort]
 known-first-party = ["teleport", "contract"]
+
+[lint.per-file-ignores]
+"tests/**" = ["ASYNC110"]  # tests poll state with short sleeps

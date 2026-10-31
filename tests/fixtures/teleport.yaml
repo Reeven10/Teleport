@@ -1,0 +1,18 @@
+# Sample Teleport workload manifest (every field). See docs/PROJECT_BRIEF.md.
+id: photo-tagger
+name: Photo tagger
+command: python tagger.py --batch 32
+runtime: { name: python, minVersion: "3.11" }
+arch: [x86_64, arm64]
+os: [linux, windows, macos]
+minRamMb: 1024
+minCpuCores: 2
+minDiskMb: 500
+needsGpu: false
+libs: [numpy, pillow]
+remoteCapable: true
+checkpoints:
+  - { id: config, name: Configuration, paths: [config.json] }
+  - { id: db, name: Tag database, paths: [data/tags.sqlite] }
+  - { id: model, name: Model weights, paths: [models/] }
+  - { id: progress, name: Progress cursor, paths: [] }

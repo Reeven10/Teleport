@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from contract.contract import (
     AuthorityService,
@@ -18,6 +18,10 @@ from contract.contract import (
 
 from .bus import EventBus
 from .settings import Prefs, Settings, SimProfile
+
+if TYPE_CHECKING:
+    from ..migration.store import CheckpointStore
+    from .workloads import WorkloadRunner
 
 
 class Context:
@@ -47,6 +51,15 @@ class Context:
             return self._services[name]
         except KeyError:
             raise RuntimeError(f"service {name!r} is not registered yet") from None
+
+    @property
+    def workloads(self) -> WorkloadRunner:
+        """Workload registry and runner (core): list(), runs(), start/pause/resume/terminate."""
+        return cast("WorkloadRunner", self._get("workloads"))
+
+    @property
+    def checkpoints(self) -> CheckpointStore:
+        return self.workloads.store
 
     @property
     def authority(self) -> AuthorityService:
