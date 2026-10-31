@@ -90,6 +90,8 @@ class PeerConnection:
         on_disconnect: Callable[[str], Any],
         session: ISecureSession | None = None,
         fault_injector: FaultInjector | None = None,
+        initial_loss: float = 0.0,
+        initial_online: bool = True,
     ) -> None:
         self.peer_id = peer_id
         self.adapter = adapter
@@ -102,9 +104,10 @@ class PeerConnection:
 
         # Quality metrics
         self.rtt_ms: float = 5.0
-        self.mbps: float = 1000.0 if link_type == "cable" else (150.0 if link_type == "wifi" else 5000.0)
-        self.loss_pct: float = 0.0
-        self.online: bool = True
+        self.loss_pct: float = initial_loss
+        self.online: bool = initial_online and (initial_loss < 80.0)
+        base_mbps = 1000.0 if link_type == "cable" else (150.0 if link_type == "wifi" else 5000.0)
+        self.mbps: float = base_mbps if self.online else 0.0
 
         self._closed = False
         self.closed_event = asyncio.Event()
@@ -114,7 +117,7 @@ class PeerConnection:
         self._ping_times: dict[int, float] = {}
         self._recent_pings: dict[int, bool] = {}  # seq -> acked
         self._last_pong_time: float = time.time()
-        self._dead_link_triggered = False
+        self._dead_link_triggered = not self.online
 
         # Burst throughput probing
         self._last_burst_probe_time: float = 0.0
@@ -255,8 +258,8 @@ class PeerConnection:
             sample_rtt = max(0.1, (now - t0) * 1000.0) + self.fault_injector.extra_latency_ms
             self.rtt_ms = 0.7 * self.rtt_ms + 0.3 * sample_rtt
 
-        # If previously marked dead, report recovery!
-        if self._dead_link_triggered:
+        # If previously marked dead or offline, report recovery!
+        if self._dead_link_triggered or not self.online:
             self._dead_link_triggered = False
             self.online = True
             log.info("Peer link %s recovered! Emitting link.update (online=True)", self.peer_id)
@@ -307,6 +310,11 @@ class PeerConnection:
                     oldest_keys = sorted(self._recent_pings.keys())[: len(self._recent_pings) - 10]
                     for k in oldest_keys:
                         self._recent_pings.pop(k, None)
+
+                if self._dead_link_triggered:
+                    self.loss_pct = 100.0
+                    self.online = False
+                    self.mbps = 0.0
 
                 # Send regular ping
                 self._ping_seq += 1

@@ -31,6 +31,7 @@ class DeviceServiceImpl(DeviceService):
         self.registry = DeviceRegistry(ctx.settings.home)
         self.simulator = StatsSimulator()
         self._latest_stats: dict[str, Stats] = {}
+        self._stats_received_at: dict[str, float] = {}
         self._cached_local_info: DeviceInfo | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -68,7 +69,8 @@ class DeviceServiceImpl(DeviceService):
         if not stats:
             return None
         now = time.time()
-        is_stale = (now - stats.ts) > 5.0
+        # Stale if either payload timestamp is > 5.0s in the past or elapsed reception age > 5.0s
+        is_stale = (now - stats.ts) > 5.0 or (now - self._stats_received_at.get(device_id, now)) > 5.0
         if is_stale:
             return stats.model_copy(update={"online": False})
         return stats
@@ -91,8 +93,9 @@ class DeviceServiceImpl(DeviceService):
     def record_peer_stats(self, stats: Stats) -> None:
         """Store the latest stats received from a peer device."""
         self._latest_stats[stats.deviceId] = stats
+        self._stats_received_at[stats.deviceId] = time.time()
         if peer := self.registry.get(stats.deviceId):
-            self.registry.upsert(peer, last_seen=stats.ts)
+            self.registry.upsert(peer, last_seen=time.time())
 
     def _sample_sync(self) -> Stats:
         """Synchronous sample using psutil (executed in worker thread to prevent event loop blocking)."""
