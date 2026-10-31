@@ -12,7 +12,7 @@ export function SettingsPage() {
   const [memHighPct, setMemHighPct] = useState<number>(90);
   const [predictionWindowSec, setPredictionWindowSec] = useState<number>(60);
   const [preferredLink, setPreferredLink] = useState<'auto' | 'cable' | 'wifi'>('auto');
-  const [checkpointChunkKb, setCheckpointChunkKb] = useState<number>(1024);
+  const [chunkSizeKb, setChunkSizeKb] = useState<number>(256);
   const [remoteConsent, setRemoteConsent] = useState<'prompt' | 'auto_allow' | 'deny_all'>('prompt');
 
   const [loading, setLoading] = useState(false);
@@ -36,7 +36,8 @@ export function SettingsPage() {
             if (s.memHighPct !== undefined) setMemHighPct(s.memHighPct);
             if (s.predictionWindowSec !== undefined) setPredictionWindowSec(s.predictionWindowSec);
             if (s.preferredLink) setPreferredLink(s.preferredLink);
-            if (s.checkpointChunkKb !== undefined) setCheckpointChunkKb(s.checkpointChunkKb);
+            const chunkVal = s.chunkSizeKb ?? s.checkpointChunkKb;
+            if (chunkVal !== undefined) setChunkSizeKb(chunkVal);
             if (s.remoteConsent) setRemoteConsent(s.remoteConsent);
           }
         } catch {
@@ -80,8 +81,8 @@ export function SettingsPage() {
       return;
     }
 
-    if (isNaN(checkpointChunkKb) || checkpointChunkKb < 64 || checkpointChunkKb > 16384) {
-      setErrorMessage('Checkpoint chunk size must be between 64 KB and 16,384 KB.');
+    if (isNaN(chunkSizeKb) || chunkSizeKb < 16 || chunkSizeKb > 512) {
+      setErrorMessage('Checkpoint chunk size must be between 16 KB and 512 KB.');
       return;
     }
 
@@ -92,7 +93,8 @@ export function SettingsPage() {
       memHighPct: Number(memHighPct),
       predictionWindowSec: Number(predictionWindowSec),
       preferredLink,
-      checkpointChunkKb: Number(checkpointChunkKb),
+      chunkSizeKb: Number(chunkSizeKb),
+      checkpointChunkKb: Number(chunkSizeKb),
       remoteConsent,
     };
 
@@ -338,15 +340,15 @@ export function SettingsPage() {
               <input
                 type="number"
                 data-testid="input-chunk-size"
-                value={checkpointChunkKb}
-                onChange={(e) => setCheckpointChunkKb(parseInt(e.target.value, 10))}
-                min={64}
-                max={16384}
-                step={64}
+                value={chunkSizeKb}
+                onChange={(e) => setChunkSizeKb(parseInt(e.target.value, 10))}
+                min={16}
+                max={512}
+                step={16}
                 className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs font-bold text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
               <p className="mt-1 text-[10px] text-slate-400">
-                Chunk buffer size for streaming SHA-256 validation (64 KB - 16 MB).
+                Chunk buffer size for streaming SHA-256 validation (16 KB - 512 KB, default 256 KB).
               </p>
             </div>
           </div>

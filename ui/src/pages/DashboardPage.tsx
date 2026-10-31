@@ -1,6 +1,7 @@
 import { useTeleport } from '../store/useTeleport.ts';
 import { DeviceCard } from '../components/dashboard/DeviceCard.tsx';
 import { LinkCard } from '../components/dashboard/LinkCard.tsx';
+import { DemoControlPanel } from '../components/dashboard/DemoControlPanel.tsx';
 
 export function DashboardPage() {
   const { state } = useTeleport();
@@ -40,6 +41,9 @@ export function DashboardPage() {
           </span>
         </div>
       </div>
+
+      {/* Simulated Demo Control Panel & Fault Injector */}
+      <DemoControlPanel />
 
       {/* Orchestrator Recommendation Alert Banner (if any) */}
       {rec && (

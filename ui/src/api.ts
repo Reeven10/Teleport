@@ -174,6 +174,7 @@ export interface SettingsPrefs {
   memHighPct: number;
   predictionWindowSec?: number;
   preferredLink?: 'auto' | 'cable' | 'wifi';
+  chunkSizeKb?: number;
   checkpointChunkKb?: number;
   remoteConsent?: 'prompt' | 'auto_allow' | 'deny_all';
 }
@@ -200,4 +201,16 @@ export async function apiGetSettings(): Promise<SettingsPrefs> {
 
 export async function apiPutSettings(prefs: Partial<SettingsPrefs>): Promise<SettingsPrefs> {
   return putJson<SettingsPrefs>('/api/settings', prefs);
+}
+
+export async function apiStatsOverride(
+  deviceId: string,
+  stats: {
+    cpuPct?: number;
+    memPct?: number;
+    battery?: { pct: number; charging: boolean } | null;
+    online?: boolean;
+  } | null,
+): Promise<{ ok: boolean }> {
+  return postJson<{ ok: boolean }>('/api/dev/stats-override', { deviceId, stats });
 }

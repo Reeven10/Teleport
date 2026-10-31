@@ -201,4 +201,32 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await expect(successBanner).toBeVisible();
     await expect(successBanner).toContainText('Settings saved successfully');
   });
+
+  test('scenario 7: demo control panel interactive fault injection and live stats override', async ({
+    page,
+  }) => {
+    await page.goto('/?demo=1');
+
+    // 1. Verify Demo Control Panel & SIMULATED Badge
+    const demoPanel = page.getByTestId('demo-control-panel');
+    await expect(demoPanel).toBeVisible();
+    await expect(demoPanel).toContainText('SIMULATED');
+    await expect(demoPanel).toContainText('DEMO FAULT INJECTOR & STATS OVERRIDE');
+
+    // 2. Action: Drain battery
+    await page.getByTestId('btn-drain-battery').click();
+    await expect(demoPanel).toContainText('Drained battery to 12%');
+
+    // 3. Action: CPU spike
+    await page.getByTestId('btn-cpu-spike').click();
+    await expect(demoPanel).toContainText('Injected 96% CPU spike');
+
+    // 4. Action: Drop wifi
+    await page.getByTestId('btn-drop-wifi').click();
+    await expect(demoPanel).toContainText('Dropped link to high-latency / lossy WiFi');
+
+    // 5. Action: Reset telemetry
+    await page.getByTestId('btn-reset-telemetry').click();
+    await expect(demoPanel).toContainText('Reset telemetry overrides');
+  });
 });
