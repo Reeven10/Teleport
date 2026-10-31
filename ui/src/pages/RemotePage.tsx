@@ -10,14 +10,23 @@ export function RemotePage() {
   const { state, setSimulationScenario } = useTeleport();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  const queryScenario = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('scenario') : null;
+  const initialSessionId = queryScenario === 'remote_access' ? 'session-demo-1' : (state.remoteSession?.id ?? null);
+
   // Session & Connection state
-  const [activeSessionId, setActiveSessionId] = useState<string>('session-demo-1');
-  const [isStreaming, setIsStreaming] = useState<boolean>(true);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(initialSessionId);
+  const [isStreaming, setIsStreaming] = useState<boolean>(Boolean(initialSessionId));
   const [controlsCaptured, setControlsCaptured] = useState<boolean>(false);
-  const [fps, setFps] = useState<number>(18.4);
-  const [latencyMs, setLatencyMs] = useState<number>(14);
+  const [fps, setFps] = useState<number>(0);
+  const [latencyMs, setLatencyMs] = useState<number>(state.link?.rttMs ?? 0);
   const [resolution, setResolution] = useState<{ w: number; h: number }>({ w: 1280, h: 720 });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isDemo =
+    state.isSimulated ||
+    state.mockFeederActive ||
+    Boolean(queryScenario) ||
+    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demo'));
 
   // Host consent modal state
   const [showConsentModal, setShowConsentModal] = useState<boolean>(false);
@@ -131,9 +140,12 @@ export function RemotePage() {
           startMockLoop();
         }
       })();
-    } else {
-      // Offline / Mock Feeder mode: canvas animation
+    } else if (activeSessionId) {
+      // Offline / Mock Feeder mode with active session: canvas animation
       startMockLoop();
+    } else {
+      setIsStreaming(false);
+      setFps(0);
     }
 
     function startMockLoop() {
@@ -462,7 +474,7 @@ export function RemotePage() {
       </div>
 
       {/* Scenario helpers for demonstration & review */}
-      {state.mockFeederActive && (
+      {isDemo && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2 text-xs dark:border-slate-800 dark:bg-slate-900/40">
           <span className="text-[11px] font-bold uppercase text-slate-500">Test Scenarios:</span>
           <button
@@ -589,16 +601,23 @@ export function RemotePage() {
 
         {!isStreaming && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-            <h3 className="text-base font-bold text-slate-100">Remote Stream Disconnected</h3>
+            <h3 className="text-base font-bold text-slate-100">
+              {!activeSessionId ? 'No Active Remote Session' : 'Remote Stream Disconnected'}
+            </h3>
             <p className="mt-1 text-xs text-slate-400">
-              The remote session was closed or waiting for host authorization.
+              {!activeSessionId
+                ? 'Remote access activates automatically when feasibility evaluates REMOTE_ACCESS, or via demo simulation.'
+                : 'The remote session was closed or waiting for host authorization.'}
             </p>
             <button
               type="button"
-              onClick={() => setIsStreaming(true)}
+              onClick={() => {
+                setActiveSessionId('session-demo-1');
+                setIsStreaming(true);
+              }}
               className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-blue-700"
             >
-              Reconnect Viewport
+              {!activeSessionId ? 'Start Viewport Session' : 'Reconnect Viewport'}
             </button>
           </div>
         )}

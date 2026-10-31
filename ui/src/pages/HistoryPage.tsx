@@ -4,6 +4,7 @@ import {
   apiGetHistoryDecisions,
   apiGetHistoryDevices,
   apiGetHistoryMigrations,
+  apiGetHistoryMigration,
 } from '../api.ts';
 import {
   MOCK_HISTORY_DECISIONS,
@@ -55,17 +56,12 @@ export function HistoryPage() {
           }
 
           if (apiDevs.length > 0) {
-            const devItems: DeviceHistoryItem[] = apiDevs.map((d) => {
-              const count = apiMigs.filter(
-                (m) => m.sourceId === d.id || m.targetId === d.id
-              ).length;
-              return {
-                device: d,
-                firstSeen: Date.now() - 3600 * 24 * 1000,
-                lastSeen: Date.now(),
-                migrationCount: count,
-              };
-            });
+            const devItems: DeviceHistoryItem[] = apiDevs.map((s) => ({
+              device: s.device,
+              firstSeen: s.firstSeen,
+              lastSeen: s.lastSeen,
+              migrationCount: s.migrationCount,
+            }));
             setDeviceItems(devItems);
           }
         } catch {
@@ -80,6 +76,21 @@ export function HistoryPage() {
       cancelled = true;
     };
   }, [state.agentReachable]);
+
+  const handleSelectMigration = async (mig: MigrationStatus) => {
+    try {
+      if (state.agentReachable) {
+        const full = await apiGetHistoryMigration(mig.id);
+        if (full) {
+          setInspectingMigration(full);
+          return;
+        }
+      }
+    } catch {
+      // Fallback to table status
+    }
+    setInspectingMigration(mig);
+  };
 
   const handleReconnect = (device: DeviceInfo) => {
     const addr = device.addrs[0]?.addr || `${device.id}:8765`;
@@ -121,7 +132,7 @@ export function HistoryPage() {
       {/* 2. Migration Table with Filters & Click to Detail */}
       <MigrationTable
         migrations={migrations}
-        onSelectMigration={setInspectingMigration}
+        onSelectMigration={handleSelectMigration}
         selectedDeviceId={selectedDeviceId}
         onClearDeviceFilter={() => setSelectedDeviceId(null)}
       />

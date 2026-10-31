@@ -1,5 +1,6 @@
 import type {
   Authority,
+  AuthorityConflict,
   BusEvent,
   DeviceInfo,
   LinkQuality,
@@ -8,6 +9,7 @@ import type {
   RemoteSession,
   Stats,
   WorkloadManifest,
+  WorkloadRun,
 } from '@contract';
 
 export interface MetricHistoryPoint {
@@ -37,6 +39,7 @@ export interface TeleportState {
   migrationStatus: MigrationStatus | null;
   authority: Authority | null;
   remoteSession: RemoteSession | null;
+  authorityConflict: AuthorityConflict | null;
   wsConnected: boolean;
   agentReachable: boolean;
   mockFeederActive: boolean;
@@ -45,7 +48,18 @@ export interface TeleportState {
 }
 
 export type StoreAction =
-  | { type: 'INIT_REST'; payload: { devices: DeviceInfo[]; stats: Stats[]; workloads?: WorkloadItem[] } }
+  | {
+      type: 'INIT_REST';
+      payload: {
+        thisDeviceId?: string;
+        devices: DeviceInfo[];
+        stats: Stats[];
+        workloads?: WorkloadItem[];
+        migrations?: MigrationStatus[];
+        workloadRuns?: WorkloadRun[];
+        remoteSessions?: RemoteSession[];
+      };
+    }
   | { type: 'BUS_EVENT'; payload: BusEvent }
   | { type: 'SET_WS_CONNECTED'; payload: boolean }
   | { type: 'SET_AGENT_REACHABLE'; payload: boolean }

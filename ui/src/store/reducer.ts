@@ -1,4 +1,4 @@
-import type { BusEvent, DeviceInfo, Stats } from '@contract';
+import type { BusEvent, DeviceInfo, MigrationStatus, RemoteSession, Stats } from '@contract';
 import type { MetricHistoryPoint, StoreAction, TeleportState, WorkloadItem } from './types.ts';
 
 export function createInitialState(): TeleportState {
@@ -15,9 +15,10 @@ export function createInitialState(): TeleportState {
     migrationStatus: null,
     authority: null,
     remoteSession: null,
+    authorityConflict: null,
     wsConnected: false,
     agentReachable: false,
-    mockFeederActive: true, // Default to true when unconfigured/offline
+    mockFeederActive: true,
     theme: savedTheme ?? 'dark',
     isSimulated: true,
   };
@@ -56,28 +57,68 @@ function appendHistory(
 export function storeReducer(state: TeleportState, action: StoreAction): TeleportState {
   switch (action.type) {
     case 'INIT_REST': {
-      const { devices, stats, workloads } = action.payload;
-      const deviceMap: Record<string, DeviceInfo> = { ...state.devices };
-      let thisDev = state.thisDeviceId;
-      let peerDev = state.peerDeviceId;
+      const { thisDeviceId, devices, stats, workloads, migrations, workloadRuns, remoteSessions } = action.payload;
+      const deviceMap: Record<string, DeviceInfo> = {};
+      let thisDev = thisDeviceId || state.thisDeviceId;
 
-      devices.forEach((d, idx) => {
+      devices.forEach((d) => {
         deviceMap[d.id] = d;
-        if (idx === 0 && (!thisDev || !deviceMap[thisDev])) {
-          thisDev = d.id;
-        } else if (idx === 1 && !peerDev) {
-          peerDev = d.id;
-        }
       });
 
-      const statsMap: Record<string, Stats> = { ...state.stats };
+      const firstDev = devices[0];
+      if (!thisDev && firstDev) {
+        thisDev = firstDev.id;
+      }
+
+      // First peer device that is not thisDeviceId
+      let peerDev = state.peerDeviceId;
+      if (!peerDev || peerDev === thisDev || !deviceMap[peerDev]) {
+        const peer = devices.find((d) => d.id !== thisDev);
+        peerDev = peer ? peer.id : null;
+      }
+
+      const statsMap: Record<string, Stats> = {};
       let historyMap = { ...state.history60s };
       stats.forEach((s) => {
         statsMap[s.deviceId] = s;
         historyMap = appendHistory(historyMap, s.deviceId, s);
       });
 
-      const nextWorkloads: WorkloadItem[] = workloads ?? state.workloads;
+      // Map workload runs
+      let nextWorkloads: WorkloadItem[] = workloads ?? state.workloads;
+      if (workloadRuns && workloadRuns.length > 0) {
+        const runMap = new Map(workloadRuns.map((r) => [r.workloadId, r]));
+        nextWorkloads = nextWorkloads.map((w) => {
+          const run = runMap.get(w.manifest.id);
+          if (run) {
+            return {
+              ...w,
+              status: run.state === 'running' ? 'RUNNING' : 'STOPPED',
+            };
+          }
+          return w;
+        });
+      }
+
+      // Check latest migration and authority (P4-6)
+      let nextMig: MigrationStatus | null = state.migrationStatus;
+      let nextAuth = state.authority;
+      if (migrations && migrations.length > 0) {
+        const sorted = [...migrations].sort((a, b) => b.startedAt - a.startedAt);
+        const latest = sorted[0];
+        if (latest) {
+          nextMig = latest;
+          if (latest.authority) {
+            nextAuth = latest.authority;
+          }
+        }
+      }
+
+      // Check remote sessions
+      let nextRemote: RemoteSession | null = state.remoteSession;
+      if (remoteSessions && remoteSessions.length > 0) {
+        nextRemote = remoteSessions[remoteSessions.length - 1] ?? null;
+      }
 
       const nextState: TeleportState = {
         ...state,
@@ -87,7 +128,11 @@ export function storeReducer(state: TeleportState, action: StoreAction): Telepor
         stats: statsMap,
         history60s: historyMap,
         workloads: nextWorkloads,
+        migrationStatus: nextMig,
+        authority: nextAuth,
+        remoteSession: nextRemote,
         agentReachable: true,
+        mockFeederActive: action.payload.thisDeviceId ? false : state.mockFeederActive,
       };
       nextState.isSimulated = checkSimulated(nextState);
       return nextState;
@@ -240,6 +285,10 @@ function handleBusEvent(state: TeleportState, event: BusEvent): TeleportState {
 
     case 'remote.session': {
       return { ...state, remoteSession: event.session };
+    }
+
+    case 'authority.conflict': {
+      return { ...state, authorityConflict: event.conflict };
     }
 
     case 'decision.logged':

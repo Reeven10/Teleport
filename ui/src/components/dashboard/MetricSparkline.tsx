@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import type { MetricHistoryPoint } from '../../store/types.ts';
 
@@ -9,7 +10,7 @@ interface MetricSparklineProps {
   height?: number;
 }
 
-export function MetricSparkline({
+export const MetricSparkline = memo(function MetricSparkline({
   data,
   dataKey,
   color = '#38bdf8',
@@ -53,4 +54,4 @@ export function MetricSparkline({
       </ResponsiveContainer>
     </div>
   );
-}
+});

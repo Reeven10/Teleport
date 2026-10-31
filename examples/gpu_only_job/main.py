@@ -1,31 +1,20 @@
-"""GPU-Only High-Throughput Raytracer and Neural Inference Workload.
+#!/usr/bin/env python3
+"""GPU-Only Workload Demo for Teleport.
 
-Declares needsGpu: true and arch: [x86_64].
-Migrating to an arm64 low-spec device evaluates to REMOTE_ACCESS fallback.
-Runs standalone without Teleport.
+Simulates a CUDA/GPU hardware accelerated machine learning / raytracing render task.
+Requires NVIDIA GPU and x86_64 architecture. When evaluated against arm64-lowspec,
+Teleport's Feasibility Engine automatically rejects migration and triggers REMOTE_ACCESS fallback.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
+from typing import Any
 
-# Optional Teleport SDK import
-try:
-    import teleport_sdk as teleport
-except ImportError:
-    repo_sdk = Path(__file__).resolve().parents[2] / "sdk"
-    if repo_sdk.exists():
-        sys.path.insert(0, str(repo_sdk))
-        try:
-            import teleport_sdk as teleport
-        except ImportError:
-            teleport = None
-    else:
-        teleport = None
+import teleport_sdk as teleport
 
 
 def save_state(frame: int, samples: int, vram_mb: int) -> None:
@@ -38,11 +27,13 @@ def save_state(frame: int, samples: int, vram_mb: int) -> None:
     Path("frame_state.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def load_state() -> dict[str, object]:
+def load_state() -> dict[str, Any]:
     p = Path("frame_state.json")
     if p.exists():
         try:
-            return json.loads(p.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+            loaded = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                return loaded
         except Exception:
             return {}
     return {}
@@ -52,21 +43,21 @@ def main() -> None:
     print("[GPU-Compute] Initializing Neural Raytracing Engine...", flush=True)
 
     sdk_active = False
-    if teleport is not None:
-        try:
-            teleport.init()
-            sdk_active = True
-            print("[GPU-Compute] Teleport SDK connected to agent.", flush=True)
-        except Exception as e:
-            print(f"[GPU-Compute] Standalone execution ({e}).", flush=True)
+    try:
+        teleport.init()
+        sdk_active = True
+        print("[GPU-Compute] Teleport SDK connected to agent.", flush=True)
+    except Exception as e:
+        print(f"[GPU-Compute] Standalone execution ({e}).", flush=True)
 
-    state = None
-    if sdk_active and teleport:
-        state = teleport.restore("frame_state")
-    if not state:
+    restored = teleport.restore("frame_state") if sdk_active else None
+    state: dict[str, Any]
+    if isinstance(restored, dict):
+        state = restored
+    else:
         state = load_state()
 
-    frame = int(state.get("frame", 0))  # type: ignore[union-attr]
+    frame = int(state.get("frame", 0))
     print("[GPU-Compute] Device Context: NVIDIA CUDA Raytracing Architecture (x86_64 Host)", flush=True)
     if frame > 0:
         print(f"[GPU-Compute] Resuming render sequence from frame {frame}", flush=True)
@@ -74,7 +65,7 @@ def main() -> None:
     vram_mb = 1840
 
     while True:
-        if sdk_active and teleport and teleport.should_stop():
+        if sdk_active and teleport.should_stop():
             print("[GPU-Compute] Render process stopped by controller.", flush=True)
             break
 
@@ -82,7 +73,7 @@ def main() -> None:
         samples = (frame * 16) % 1024 + 16
 
         save_state(frame, samples, vram_mb)
-        if sdk_active and teleport:
+        if sdk_active:
             teleport.checkpoint("frame_state", {
                 "frame": frame,
                 "samples_per_pixel": samples,
@@ -91,14 +82,12 @@ def main() -> None:
             })
 
         print(
-            f"[GPU-Compute] Render Pass #{frame:05d} | Samples: {samples:4d} spp | "
-            f"VRAM: {vram_mb} MB | Metal/ARM: Incompatible | 60.2 FPS",
+            f"[GPU-Compute] Frame: {frame:05d} rendered | Samples: {samples:4d}/px | "
+            f"VRAM: {vram_mb} MB | Engine: OptiX 8.0",
             flush=True,
         )
-
         if os.environ.get("RUN_ONCE") == "1":
             break
-
         time.sleep(0.5)
 
 

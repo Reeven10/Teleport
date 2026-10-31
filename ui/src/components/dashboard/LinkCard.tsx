@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { LinkQuality } from '@contract';
 import { formatMbps, formatMs, formatPercent } from '../../utils/formatters.ts';
 
@@ -6,7 +7,7 @@ interface LinkCardProps {
   peerOnline: boolean;
 }
 
-export function LinkCard({ link, peerOnline }: LinkCardProps) {
+export const LinkCard = memo(function LinkCard({ link, peerOnline }: LinkCardProps) {
   if (!peerOnline || !link) {
     return (
       <div className="flex h-full min-h-[300px] w-full flex-col items-center justify-center rounded-xl border border-dashed border-rose-200 bg-rose-50/40 p-6 text-center dark:border-rose-950/60 dark:bg-rose-950/10 lg:w-48">
@@ -95,5 +96,5 @@ export function LinkCard({ link, peerOnline }: LinkCardProps) {
       </div>
     </div>
   );
-}
+});
 
