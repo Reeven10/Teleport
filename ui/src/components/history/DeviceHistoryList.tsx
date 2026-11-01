@@ -25,13 +25,13 @@ export function DeviceHistoryList({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+    <div className="rounded-2xl border border-line bg-surface p-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+          <h2 className="font-serif text-xl text-ink">
             Known Peer Devices ({devices.length})
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Historical registry of paired compute devices, hardware specs and migration counts
           </p>
         </div>
@@ -40,7 +40,7 @@ export function DeviceHistoryList({
             type="button"
             data-testid="btn-clear-device-filter"
             onClick={() => onSelectDevice(null)}
-            className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            className="rounded-lg bg-raised px-2.5 py-1 text-xs font-semibold text-muted hover:bg-slate-200"
           >
             Show All Devices
           </button>
@@ -65,42 +65,42 @@ export function DeviceHistoryList({
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase font-bold text-slate-400">
+                  <span className="font-mono text-[10px] uppercase font-bold text-faint">
                     {dev.os} · {dev.arch}
                   </span>
-                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-ink/85">
                     {item.migrationCount} {item.migrationCount === 1 ? 'migration' : 'migrations'}
                   </span>
                 </div>
 
-                <h3 className="mt-2 text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                <h3 className="mt-2 text-sm font-bold text-ink line-clamp-1">
                   {dev.name}
                 </h3>
-                <p className="font-mono text-[11px] text-slate-400">
+                <p className="font-mono text-[11px] text-faint">
                   {dev.id}
                 </p>
 
-                <div className="mt-3 space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+                <div className="mt-3 space-y-1 text-[11px] text-muted">
                   <div>
-                    <span className="text-slate-400">Compute: </span>
+                    <span className="text-faint">Compute: </span>
                     <span className="font-semibold">{dev.cpuCores} cores</span> ·{' '}
                     <span className="font-semibold">{formatBytes(dev.ramMb * 1024 * 1024)} RAM</span>
                   </div>
                   {dev.gpu && (
                     <div className="line-clamp-1">
-                      <span className="text-slate-400">GPU: </span>
+                      <span className="text-faint">GPU: </span>
                       <span className="font-medium">{dev.gpu}</span>
                     </div>
                   )}
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-0.5">
+                  <div className="flex items-center justify-between text-[10px] text-muted pt-0.5">
                     <span>First: {formatTime(item.firstSeen)}</span>
                     <span>Last: {formatTime(item.lastSeen)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400">
+              <div className="mt-4 pt-3 border-t border-line flex items-center justify-between">
+                <span className="text-[10px] text-faint">
                   {isSelected ? 'Filtering migrations' : 'Click to filter'}
                 </span>
                 <button
@@ -110,7 +110,7 @@ export function DeviceHistoryList({
                     e.stopPropagation();
                     onReconnect(dev);
                   }}
-                  className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                  className="tp-btn-primary"
                 >
                   Reconnect
                 </button>

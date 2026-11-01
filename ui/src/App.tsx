@@ -14,13 +14,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <TeleportProvider>
-        <div className="flex min-h-screen flex-col bg-slate-100 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
-          <TopBar />
-          <RemoteConsentPrompt />
-          <div className="flex flex-1">
-            <Sidebar />
-            <main className="flex-1 overflow-y-auto p-6 md:p-8">
-              <div className="mx-auto max-w-7xl">
+        <div className="flex min-h-screen bg-canvas text-ink">
+          <Sidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TopBar />
+            <RemoteConsentPrompt />
+            <main className="flex-1 px-6 py-8 md:px-10">
+              <div className="mx-auto max-w-[1200px]">
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/workloads" element={<WorkloadsPage />} />

@@ -1,4 +1,5 @@
 import type { MigrationStatus, Reason } from '@contract';
+import { Icon } from '../ui/Icon.tsx';
 import { formatBytes } from '../../utils/formatters.ts';
 
 interface MigrationDetailModalProps {
@@ -29,7 +30,7 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
       case 'pass':
         return (
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-            ✓
+            <Icon name="check" className="h-3 w-3" />
           </span>
         );
       case 'warn':
@@ -41,7 +42,7 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
       case 'block':
         return (
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400">
-            ✕
+            <Icon name="x" className="h-3 w-3" />
           </span>
         );
     }
@@ -76,14 +77,14 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
   return (
     <div
       data-testid="migration-detail-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 overflow-y-auto"
     >
-      <div className="relative my-8 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div className="relative my-8 w-full max-w-3xl rounded-2xl border border-line bg-surface p-6 shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+        <div className="flex items-start justify-between border-b border-line pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-ink">
                 Migration Post-Mortem & Step Replay
               </h2>
               <span
@@ -95,14 +96,14 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
                     ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300'
                     : isRemote
                     ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300'
-                    : 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300'
+                    : 'border border-line text-ink'
                 }`}
               >
                 {migration.phase}
               </span>
             </div>
-            <p className="mt-1 font-mono text-xs text-slate-400">
-              ID: {migration.id} · Workload: <span className="font-bold text-slate-700 dark:text-slate-200">{migration.workloadId}</span>
+            <p className="mt-1 font-mono text-xs text-faint">
+              ID: {migration.id} · Workload: <span className="font-bold text-ink/85">{migration.workloadId}</span>
             </p>
           </div>
 
@@ -110,46 +111,46 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
             type="button"
             data-testid="btn-close-detail"
             onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+            className="rounded-xl p-2 text-faint hover:bg-raised hover:text-slate-600"
           >
-            ✕
+            <Icon name="x" className="h-4 w-4" />
           </button>
         </div>
 
         <div className="mt-5 space-y-6 max-h-[75vh] overflow-y-auto pr-1">
           {/* Key Metric Banners: Interruption, Bytes, Route, Epoch */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-              <span className="text-[10px] font-bold uppercase text-slate-400">Cutover Interruption</span>
-              <p data-testid="detail-interruption" className="mt-1 font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">
+            <div className="rounded-xl bg-raised p-3">
+              <span className="tp-label">Cutover Interruption</span>
+              <p data-testid="detail-interruption" className="mt-1 font-mono text-lg font-semibold text-emerald-600 dark:text-emerald-400">
                 {migration.interruptionMs !== undefined && migration.interruptionMs !== null
                   ? `${migration.interruptionMs} ms`
                   : 'N/A (Rolled back)'}
               </p>
             </div>
 
-            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-              <span className="text-[10px] font-bold uppercase text-slate-400">State Volume</span>
-              <p className="mt-1 font-mono text-lg font-black text-slate-800 dark:text-slate-200">
+            <div className="rounded-xl bg-raised p-3">
+              <span className="tp-label">State Volume</span>
+              <p className="mt-1 font-mono text-lg font-semibold text-ink">
                 {formatBytes(migration.bytesDone)}
               </p>
             </div>
 
-            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-              <span className="text-[10px] font-bold uppercase text-slate-400">Route & Transport</span>
-              <p className="mt-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                <span className="text-blue-600 dark:text-blue-400 font-mono">{migration.sourceId}</span> →{' '}
+            <div className="rounded-xl bg-raised p-3">
+              <span className="tp-label">Route & Transport</span>
+              <p className="mt-1 text-xs font-semibold text-ink">
+                <span className="text-ink font-mono">{migration.sourceId}</span> →{' '}
                 <span className="text-emerald-600 dark:text-emerald-400 font-mono">{migration.targetId}</span>
               </p>
-              <span className="text-[10px] uppercase font-bold text-slate-400">{migration.link} link</span>
+              <span className="tp-label">{migration.link} link</span>
             </div>
 
-            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-              <span className="text-[10px] font-bold uppercase text-slate-400">Authority Epoch</span>
-              <p data-testid="detail-epoch" className="mt-1 font-mono text-lg font-black text-indigo-600 dark:text-indigo-400">
+            <div className="rounded-xl bg-raised p-3">
+              <span className="tp-label">Authority Epoch</span>
+              <p data-testid="detail-epoch" className="mt-1 font-mono text-lg font-semibold text-ink">
                 Epoch {migration.authority.epoch}
               </p>
-              <span className="text-[10px] font-semibold text-slate-500">
+              <span className="text-[10px] font-semibold text-muted">
                 Holder: {migration.authority.holder} ({migration.authority.state})
               </span>
             </div>
@@ -157,32 +158,32 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
 
           {/* Migration Detailed Performance Metrics (if available) */}
           {migration.metrics && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-slate-800 dark:bg-slate-800/30">
-              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <div className="rounded-xl border border-line bg-raised p-3.5">
+              <h4 className="tp-label">
                 Wire Metrics & Deduplication
               </h4>
               <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs font-mono">
                 <div>
-                  <span className="text-[10px] text-slate-400">Throughput:</span>
-                  <p className="font-bold text-slate-900 dark:text-white">
+                  <span className="text-[10px] text-faint">Throughput:</span>
+                  <p className="font-bold text-ink">
                     {migration.metrics.throughputMbps.toFixed(1)} Mbps
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400">Wire Duration:</span>
-                  <p className="font-bold text-slate-900 dark:text-white">
+                  <span className="text-[10px] text-faint">Wire Duration:</span>
+                  <p className="font-bold text-ink">
                     {migration.metrics.durationMs} ms
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400">Skipped/Dedup:</span>
-                  <p className="font-bold text-slate-900 dark:text-white">
+                  <span className="text-[10px] text-faint">Skipped/Dedup:</span>
+                  <p className="font-bold text-ink">
                     {formatBytes(migration.metrics.bytesSkipped)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400">Chunk Buffer:</span>
-                  <p className="font-bold text-slate-900 dark:text-white">
+                  <span className="text-[10px] text-faint">Chunk Buffer:</span>
+                  <p className="font-bold text-ink">
                     {Math.round(migration.metrics.chunkSize / 1024)} KB
                   </p>
                 </div>
@@ -203,7 +204,7 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
 
           {/* Step-by-Step Phase Timeline Replay */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <h3 className="tp-label">
               Execution Phase Progression Timeline
             </h3>
             <div className="mt-3 space-y-2">
@@ -225,7 +226,7 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
                         : 'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-200'
                     }`}
                   >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-ink/85">
                       {idx + 1}
                     </span>
                     <div className="flex-1">
@@ -245,21 +246,21 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
 
           {/* Decision Evaluation & Reasons */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <h3 className="tp-label">
               Feasibility Decision & Rule Evidence
             </h3>
             <div className="mt-2 space-y-2">
               {migration.reasons.map((r, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-800/40"
+                  className="flex items-start gap-2.5 rounded-xl border border-line bg-raised p-2.5 text-xs"
                 >
                   {getSeverityIcon(r.severity)}
                   <div>
-                    <span className="font-mono text-[10px] font-bold uppercase text-slate-400">
+                    <span className="font-mono text-[10px] font-bold uppercase text-faint">
                       {r.code}
                     </span>
-                    <p className="text-slate-700 dark:text-slate-300">{r.text}</p>
+                    <p className="text-ink/85">{r.text}</p>
                   </div>
                 </div>
               ))}
@@ -269,13 +270,13 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
           {/* Checkpoint Validation Results */}
           {migration.checkpoints.length > 0 && (
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <h3 className="tp-label">
                 Transferred State Checkpoints ({migration.checkpoints.length})
               </h3>
               <div className="mt-2 overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400 dark:border-slate-800">
+                    <tr className="border-b border-line text-[11px] font-medium text-faint">
                       <th className="pb-2">Seq</th>
                       <th className="pb-2">Checkpoint ID</th>
                       <th className="pb-2">Size</th>
@@ -283,15 +284,15 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
                       <th className="pb-2">State</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tbody className="divide-y divide-line">
                     {migration.checkpoints.map((ck) => (
                       <tr key={ck.id}>
-                        <td className="py-2 font-mono text-[11px] text-slate-400">{ck.seq}</td>
-                        <td className="py-2 font-semibold text-slate-800 dark:text-slate-200">{ck.id}</td>
-                        <td className="py-2 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                        <td className="py-2 font-mono text-[11px] text-faint">{ck.seq}</td>
+                        <td className="py-2 font-semibold text-ink">{ck.id}</td>
+                        <td className="py-2 font-mono text-[11px] text-muted">
                           {formatBytes(ck.sizeBytes)}
                         </td>
-                        <td className="py-2 font-mono text-[10px] text-slate-400 max-w-[200px] truncate">
+                        <td className="py-2 font-mono text-[10px] text-faint max-w-[200px] truncate">
                           {ck.sha256}
                         </td>
                         <td className="py-2">
@@ -316,7 +317,7 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
           )}
 
           {/* Timestamps */}
-          <div className="flex justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex justify-between text-[11px] text-faint pt-2 border-t border-line">
             <span>Started: {formatTimestamp(migration.startedAt)}</span>
             <span>Ended: {formatTimestamp(migration.endedAt)}</span>
           </div>
@@ -327,7 +328,7 @@ export function MigrationDetailModal({ migration, onClose }: MigrationDetailModa
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+            className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
           >
             Close Replay
           </button>

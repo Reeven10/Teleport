@@ -1,6 +1,7 @@
 """Counter job: counts up, checkpoints every step, resumes from restore.
 
-Env: COUNTER_TARGET (default 1000), COUNTER_STEP_S (default 0.1). Runs standalone or under Teleport.
+Env: COUNTER_TARGET (default 100000000, so a demo never ends by itself), COUNTER_STEP_S (default 0.1).
+Runs standalone or under Teleport.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ def main() -> int:
     lock = threading.Lock()
 
     config = teleport.restore("config") or {
-        "target": int(os.environ.get("COUNTER_TARGET", "1000")),
+        "target": int(os.environ.get("COUNTER_TARGET", "100000000")),
         "stepS": float(os.environ.get("COUNTER_STEP_S", "0.1")),
     }
     assert isinstance(config, dict)

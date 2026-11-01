@@ -1,3 +1,4 @@
+import { PageHeader } from '../components/ui/Icon.tsx';
 import { useEffect, useState } from 'react';
 import type { DecisionLog, DeviceInfo, MigrationStatus } from '@contract';
 import {
@@ -101,18 +102,13 @@ export function HistoryPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-            Migration & Audit History
-          </h1>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Historical registry of past devices, step-by-step migration post-mortems, and decision evidence
-          </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex-1">
+          <PageHeader eyebrow="History" title="Every move, with its reasons" description="Past devices, each migration step by step, and the evidence behind every decision." />
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-3 py-1 font-mono text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <span className="rounded-full bg-raised px-3 py-1 font-mono text-[11px] font-semibold text-muted">
             {migrations.length} Migrations Logged
           </span>
           <span className="rounded-full bg-indigo-50 px-3 py-1 font-mono text-[11px] font-semibold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">

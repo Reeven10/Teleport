@@ -14,12 +14,12 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await expect(page.getByTestId('device-card-device-a')).toBeVisible();
     await expect(page.getByTestId('device-card-device-b')).toBeVisible();
 
-    // 4. Verify Link Card
-    await expect(page.getByText('Peer Transport', { exact: true })).toBeVisible();
+    // 4. Verify the link between both devices
+    await expect(page.getByTestId('link-bridge')).toBeVisible();
 
     // 5. Navigate to Workloads page
     await page.getByRole('link', { name: /Workloads/i }).click();
-    await expect(page.getByText('Workload Registry & Feasibility')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'What runs here' })).toBeVisible();
     await expect(page.getByTestId('workload-card-wl-token-trainer')).toBeVisible();
   });
 
@@ -29,7 +29,7 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await page.goto('/migration?scenario=in_flight');
 
     // Verify Migration page title
-    await expect(page.getByText('Migration Engine & Authority Cutover')).toBeVisible();
+    await expect(page.getByTestId('migration-phase-badge')).toBeVisible();
 
     // Checkpoint grid counter: 5 of 10 validated
     const counter = page.getByTestId('checkpoint-counter');
@@ -104,7 +104,7 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await page.goto('/remote?scenario=remote_access');
 
     // Verify Remote page header
-    await expect(page.getByText('Remote Access Viewport')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'See the other screen' })).toBeVisible();
 
     // Viewport canvas is mounted
     const canvas = page.getByTestId('remote-viewport-canvas');
@@ -141,7 +141,7 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await page.goto('/history?mock=1');
 
     // 1. Verify History Header
-    await expect(page.getByText('Migration & Audit History')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Every move, with its reasons' })).toBeVisible();
 
     // 2. Known peer device list
     const devCardB = page.getByTestId('history-device-device-b');
@@ -181,7 +181,7 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await page.goto('/settings');
 
     // 1. Verify Settings Header
-    await expect(page.getByText('Teleport Agent Settings & Policies')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'How Teleport decides' })).toBeVisible();
 
     // 2. Select Auto Mode
     await page.getByTestId('radio-mode-auto').check();

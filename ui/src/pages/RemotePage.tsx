@@ -261,27 +261,26 @@ export function RemotePage() {
 
   const linkBadgeColor =
     state.link?.link === 'cable'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
-      : 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300';
+      ? 'border border-ok/40 text-ok'
+      : 'border border-line text-muted';
   const waiting = hosts.flatMap((h) =>
     (h.sessions ?? []).filter((s) => !s.consent).map((s) => ({ host: h, session: s })),
   );
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
+          <p className="tp-label mb-1.5">Remote access</p>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-              Remote Access Viewport
-            </h1>
+            <h1 className="tp-title">See the other screen</h1>
             {simulated && (
-              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold uppercase text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">
+              <span className="tp-chip border-warn/40 bg-warn-soft text-warn">
                 Simulated
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-xs text-muted">
             See and control another paired laptop's screen. The workload keeps running there; the other laptop
             is asked to allow it first.
           </p>
@@ -303,7 +302,7 @@ export function RemotePage() {
               data-testid="btn-capture-controls"
               onClick={() => setControlsCaptured(true)}
               disabled={!view}
-              className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="tp-btn"
             >
               Capture Inputs
             </button>
@@ -313,7 +312,7 @@ export function RemotePage() {
             data-testid="btn-disconnect-remote"
             onClick={handleDisconnect}
             disabled={!view}
-            className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+            className="tp-btn"
           >
             Disconnect
           </button>
@@ -321,13 +320,13 @@ export function RemotePage() {
       </div>
 
       {simulated && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2 text-xs dark:border-slate-800 dark:bg-slate-900/40">
-          <span className="text-[11px] font-bold uppercase text-slate-500">Test Scenarios:</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-raised p-2 text-xs">
+          <span className="tp-label">Test Scenarios:</span>
           <button
             type="button"
             data-testid="btn-simulate-remote-scene"
             onClick={() => setSimulationScenario('remote_access')}
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-semibold text-sky-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-sky-400"
+            className="rounded-lg border border-line-strong bg-surface px-2.5 py-1 font-semibold text-sky-600 shadow-sm dark:text-sky-400"
           >
             Simulate Remote Decision Stream
           </button>
@@ -335,7 +334,7 @@ export function RemotePage() {
             type="button"
             data-testid="btn-trigger-consent-modal"
             onClick={() => setShowDemoConsent(true)}
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-semibold text-purple-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-purple-400"
+            className="rounded-lg border border-line-strong bg-surface px-2.5 py-1 font-semibold text-purple-600 shadow-sm dark:text-purple-400"
           >
             Simulate Host Consent Modal
           </button>
@@ -343,16 +342,16 @@ export function RemotePage() {
       )}
 
       {!simulated && !view && (
-        <div data-testid="remote-hosts" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">View another device</h2>
+        <div data-testid="remote-hosts" className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+          <h2 className="text-sm font-bold text-ink">View another device</h2>
           {hosts.length === 0 && (
-            <p className="mt-2 text-xs text-slate-500">No paired device yet: pair one with Pair Device first.</p>
+            <p className="mt-2 text-xs text-muted">No paired device yet: pair one with Pair Device first.</p>
           )}
           <div className="mt-3 space-y-2">
             {hosts.map((h) => (
               <div
                 key={h.id}
-                className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-line px-3 py-2"
               >
                 <span className="min-w-32 text-sm font-semibold">{h.name}</span>
                 {h.reachable ? (
@@ -360,7 +359,7 @@ export function RemotePage() {
                     <select
                       value={choice[h.id] ?? WHOLE_SCREEN}
                       onChange={(e) => setChoice((c) => ({ ...c, [h.id]: e.target.value }))}
-                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                      className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-xs"
                     >
                       <option value={WHOLE_SCREEN}>Whole screen</option>
                       {(h.workloads ?? []).map((w) => (
@@ -375,7 +374,7 @@ export function RemotePage() {
                       data-testid={`btn-request-view-${h.id}`}
                       disabled={busy === h.id}
                       onClick={() => requestView(h)}
-                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                      className="tp-btn-primary"
                     >
                       {busy === h.id ? 'Asking...' : 'Request access'}
                     </button>
@@ -403,29 +402,29 @@ export function RemotePage() {
 
       <div
         data-testid="remote-status-bar"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-xs shadow-sm"
       >
         <div className="flex flex-wrap items-center gap-5">
           <span>
-            <span className="text-slate-400">Stream: </span>
+            <span className="text-faint">Stream: </span>
             <span className={`font-semibold ${isStreaming ? 'text-emerald-600' : 'text-slate-400'}`}>
               {isStreaming ? `LIVE from ${view?.hostName ?? 'host'}` : 'STOPPED'}
             </span>
           </span>
           <span className="font-mono">
-            <span className="text-slate-400">FPS: </span>
+            <span className="text-faint">FPS: </span>
             <span data-testid="remote-fps" className="font-bold text-sky-600">
               {fps.toFixed(1)}
             </span>
           </span>
           <span className="font-mono">
-            <span className="text-slate-400">Link RTT: </span>
+            <span className="text-faint">Link RTT: </span>
             <span data-testid="remote-latency" className="font-bold text-emerald-600">
               {state.link ? `${Math.round(state.link.rttMs)} ms` : 'n/a'}
             </span>
           </span>
           <span className="font-mono">
-            <span className="text-slate-400">Resolution: </span>
+            <span className="text-faint">Resolution: </span>
             {resolution.w} × {resolution.h}
           </span>
         </div>
@@ -444,7 +443,7 @@ export function RemotePage() {
         </div>
       </div>
 
-      <div className="relative flex items-center justify-center overflow-hidden rounded-2xl border border-slate-300 bg-slate-950 p-2 shadow-xl dark:border-slate-800">
+      <div className="relative flex items-center justify-center overflow-hidden rounded-2xl border border-line-strong bg-slate-950 p-2 shadow-xl">
         <canvas
           ref={canvasRef}
           data-testid="remote-viewport-canvas"
@@ -465,7 +464,7 @@ export function RemotePage() {
             <h3 className="text-base font-bold text-slate-100">
               {view ? `Connecting to ${view.hostName}...` : 'No remote session'}
             </h3>
-            <p className="mt-1 max-w-md text-xs text-slate-400">
+            <p className="mt-1 max-w-md text-xs text-faint">
               Pick a device above and click Request access. It opens here as soon as that laptop allows it.
             </p>
           </div>
@@ -474,14 +473,14 @@ export function RemotePage() {
 
       {showDemoConsent && (
         <div data-testid="consent-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-2xl">
             <h3 className="text-lg font-bold">Remote Control Permission Request</h3>
-            <p className="mt-2 text-xs text-slate-500">Simulated: this is what the host sees.</p>
+            <p className="mt-2 text-xs text-muted">Simulated: this is what the host sees.</p>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" data-testid="btn-consent-deny" onClick={() => setShowDemoConsent(false)} className="rounded-xl border px-4 py-2 text-xs font-bold">
                 Deny
               </button>
-              <button type="button" data-testid="btn-consent-allow" onClick={() => setShowDemoConsent(false)} className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white">
+              <button type="button" data-testid="btn-consent-allow" onClick={() => setShowDemoConsent(false)} className="tp-btn-primary">
                 Allow
               </button>
             </div>

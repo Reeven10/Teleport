@@ -87,7 +87,8 @@ export function formatOs(os: OsName | string | undefined): string {
 }
 
 export function formatRelativeTime(ts: number): string {
-  const diffSec = Math.floor((Date.now() - ts) / 1000);
+  const ms = ts < 1e12 ? ts * 1000 : ts; // the agent sends seconds, the mock feeder milliseconds
+  const diffSec = Math.floor((Date.now() - ms) / 1000);
   if (diffSec < 2) return 'just now';
   if (diffSec < 60) return `${diffSec}s ago`;
   const min = Math.floor(diffSec / 60);

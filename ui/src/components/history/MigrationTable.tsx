@@ -47,28 +47,28 @@ export function MigrationTable({
   const getPhaseBadge = (phase: Phase) => {
     switch (phase) {
       case 'COMPLETED':
-        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300';
+        return 'bg-ok-soft text-ok';
       case 'ROLLED_BACK':
-        return 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300';
+        return 'bg-bad-soft text-bad';
       case 'REMOTE_ACCESS':
-        return 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300';
+        return 'bg-raised text-steel';
       case 'FAILED':
-        return 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-300';
+        return 'bg-bad-soft text-bad';
       default:
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300';
+        return 'border border-line text-ink';
     }
   };
 
   const getDecisionBadge = (decision?: Decision) => {
     switch (decision) {
       case 'MIGRATE':
-        return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900';
+        return 'border-line-strong text-ink';
       case 'REMOTE_ACCESS':
-        return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900';
+        return 'border-steel/40 text-steel';
       case 'STAY':
-        return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+        return 'border-line text-muted';
       default:
-        return 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+        return 'border-line text-muted';
     }
   };
 
@@ -83,13 +83,13 @@ export function MigrationTable({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+    <div className="rounded-2xl border border-line bg-surface p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-4">
         <div>
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+          <h2 className="font-serif text-xl text-ink">
             Migration Execution History ({filteredMigrations.length})
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Recorded cutovers, rollback events, checkpoint verifications, and downtime metrics
           </p>
         </div>
@@ -115,14 +115,14 @@ export function MigrationTable({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search workload or ID..."
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-line-strong bg-surface px-2.5 py-1 text-xs text-ink/85 focus:border-ink/40 focus:outline-hidden"
           />
 
           <select
             data-testid="select-filter-decision"
             value={filterDecision}
             onChange={(e) => setFilterDecision(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-xs font-semibold text-ink/85 focus:border-ink/40 focus:outline-hidden"
           >
             <option value="ALL">All Decisions</option>
             <option value="MIGRATE">MIGRATE</option>
@@ -134,7 +134,7 @@ export function MigrationTable({
             data-testid="select-filter-outcome"
             value={filterOutcome}
             onChange={(e) => setFilterOutcome(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-xs font-semibold text-ink/85 focus:border-ink/40 focus:outline-hidden"
           >
             <option value="ALL">All Outcomes</option>
             <option value="COMPLETED">COMPLETED</option>
@@ -148,7 +148,7 @@ export function MigrationTable({
       <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800">
+            <tr className="border-b border-line text-[11px] font-medium text-faint">
               <th className="pb-3 pl-2">Started</th>
               <th className="pb-3">Workload</th>
               <th className="pb-3">Route (Source → Target)</th>
@@ -159,10 +159,10 @@ export function MigrationTable({
               <th className="pb-3 pr-2 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+          <tbody className="divide-y divide-line/60">
             {filteredMigrations.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-xs italic text-slate-400">
+                <td colSpan={8} className="py-8 text-center text-xs italic text-faint">
                   No migration history records match current filters.
                 </td>
               </tr>
@@ -176,32 +176,32 @@ export function MigrationTable({
                     key={m.id}
                     data-testid={`migration-row-${m.id}`}
                     onClick={() => onSelectMigration(m)}
-                    className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                    className="cursor-pointer transition-colors hover:bg-raised"
                   >
-                    <td className="py-3 pl-2 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                    <td className="py-3 pl-2 font-mono text-[11px] text-muted whitespace-nowrap">
                       {formatTimestamp(m.startedAt)}
                     </td>
-                    <td className="py-3 font-semibold text-slate-800 dark:text-slate-200">
+                    <td className="py-3 font-semibold text-ink">
                       <div>{m.workloadId}</div>
-                      <div className="font-mono text-[10px] text-slate-400">{m.id}</div>
+                      <div className="font-mono text-[10px] text-faint">{m.id}</div>
                     </td>
                     <td className="py-3">
                       <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">{m.sourceId}</span>
-                        <span className="text-slate-400">→</span>
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">{m.targetId}</span>
+                        <span className="font-semibold text-ink">{m.sourceId}</span>
+                        <span className="text-faint">→</span>
+                        <span className="font-semibold text-ink">{m.targetId}</span>
                       </div>
-                      <div className="text-[10px] uppercase font-bold text-slate-400">
+                      <div className="tp-label">
                         {m.link} · {formatBytes(m.bytesDone)}
                       </div>
                     </td>
                     <td className="py-3">
-                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase ${getDecisionBadge(m.decision)}`}>
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase ${getDecisionBadge(m.decision)}`}>
                         {m.decision || 'MIGRATE'}
                       </span>
                     </td>
                     <td className="py-3">
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${getPhaseBadge(m.phase)}`}>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase ${getPhaseBadge(m.phase)}`}>
                         {m.phase}
                       </span>
                     </td>
@@ -211,7 +211,7 @@ export function MigrationTable({
                           {validatedCount} / {totalCheckpoints} ok
                         </span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-faint">—</span>
                       )}
                     </td>
                     <td className="py-3 font-mono text-[11px]">
@@ -222,7 +222,7 @@ export function MigrationTable({
                       ) : m.error ? (
                         <span className="text-rose-500 font-semibold">Aborted</span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-faint">—</span>
                       )}
                     </td>
                     <td className="py-3 pr-2 text-right">
@@ -233,7 +233,7 @@ export function MigrationTable({
                           e.stopPropagation();
                           onSelectMigration(m);
                         }}
-                        className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                        className="rounded-lg bg-raised px-2.5 py-1 text-xs font-semibold text-ink/85 hover:bg-slate-200"
                       >
                         Replay
                       </button>

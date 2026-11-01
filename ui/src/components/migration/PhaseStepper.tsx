@@ -1,98 +1,101 @@
 import type { Phase } from '@contract';
+import { Icon } from '../ui/Icon.tsx';
 
 interface PhaseStepperProps {
   phase: Phase;
+  /** The step that was running when the migration rolled back or failed. */
+  failedAt?: Phase | null;
+  /** When each step started (ms since epoch), as seen by this dashboard. */
+  startedAt?: Partial<Record<Phase, number>>;
+  now?: number;
 }
 
-const ORDERED_STEPS: { key: Phase; label: string }[] = [
-  { key: 'CONNECTING', label: '1. Connecting' },
-  { key: 'EVALUATING', label: '2. Evaluating' },
-  { key: 'TRANSFERRING', label: '3. Transferring' },
-  { key: 'VALIDATING', label: '4. Validating' },
-  { key: 'FENCING', label: '5. Fencing' },
-  { key: 'STARTING_TARGET', label: '6. Starting Target' },
-  { key: 'COMPLETED', label: '7. Completed' },
+const STEPS: { key: Phase; label: string; hint: string }[] = [
+  { key: 'CONNECTING', label: 'Connect', hint: 'open the encrypted link' },
+  { key: 'EVALUATING', label: 'Evaluate', hint: 'can the target run it?' },
+  { key: 'TRANSFERRING', label: 'Transfer', hint: 'send checkpoints, live' },
+  { key: 'VALIDATING', label: 'Validate', hint: 'target checks SHA-256' },
+  { key: 'FENCING', label: 'Fence', hint: 'pause source, epoch + 1' },
+  { key: 'STARTING_TARGET', label: 'Start target', hint: 'resume from state' },
+  { key: 'COMPLETED', label: 'Done', hint: 'authority moved' },
 ];
 
-export function PhaseStepper({ phase }: PhaseStepperProps) {
-  const isRolledBack = phase === 'ROLLED_BACK' || phase === 'ROLLING_BACK';
-  const isRemoteAccess = phase === 'REMOTE_ACCESS';
-  const isFailed = phase === 'FAILED';
+function seconds(ms: number): string {
+  return ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
 
-  const currentIdx = ORDERED_STEPS.findIndex((s) => s.key === phase);
+export function PhaseStepper({ phase, failedAt, startedAt = {}, now = Date.now() }: PhaseStepperProps) {
+  const rolledBack = phase === 'ROLLED_BACK' || phase === 'ROLLING_BACK' || phase === 'FAILED';
+  const remote = phase === 'REMOTE_ACCESS';
+  const stopIdx = rolledBack ? STEPS.findIndex((s) => s.key === (failedAt ?? 'TRANSFERRING')) : -1;
+  const currentIdx = rolledBack ? stopIdx : STEPS.findIndex((s) => s.key === phase);
+  const done = phase === 'COMPLETED';
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center border-b border-slate-100 pb-3 dark:border-slate-800">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            Cutover Pipeline Stepper
-          </span>
-          <div className="flex items-center gap-2 mt-0.5">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Phase: <span className="font-mono text-indigo-600 dark:text-indigo-400">{phase}</span>
-            </h3>
-          </div>
-        </div>
-
-        {/* Branch alerts */}
-        {isRolledBack && (
-          <div className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-            <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
-            BRANCH: ROLLED BACK TO SOURCE (Authority Retained)
-          </div>
+    <div className="tp-card p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="tp-label">Cutover</p>
+        {rolledBack && (
+          <p className="text-xs text-bad">
+            {phase === 'FAILED' ? 'Not migrated' : 'Rolled back'} during {STEPS[stopIdx]?.label.toLowerCase() ?? 'the transfer'}.
+            The workload kept running on the source.
+          </p>
         )}
-        {isRemoteAccess && (
-          <div className="flex items-center gap-2 rounded-lg bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300">
-            <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
-            BRANCH: REMOTE ACCESS STREAMING ACTIVE
-          </div>
-        )}
-        {isFailed && (
-          <div className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-            MIGRATION FAILED
-          </div>
-        )}
+        {remote && <p className="text-xs text-steel">Remote access instead: the workload stays where it is.</p>}
       </div>
 
-      {/* Normal Progression Stepper */}
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        {ORDERED_STEPS.map((step, idx) => {
-          const isPassed = !isRolledBack && !isRemoteAccess && currentIdx >= 0 && idx < currentIdx;
-          const isCurrent = !isRolledBack && !isRemoteAccess && step.key === phase;
-          const isFuture = !isRolledBack && !isRemoteAccess && (currentIdx < 0 || idx > currentIdx);
-
-          let stepStyle = 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-500';
-          let dotStyle = 'bg-slate-300 dark:bg-slate-700';
-
-          if (isPassed) {
-            stepStyle = 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300';
-            dotStyle = 'bg-emerald-500';
-          } else if (isCurrent) {
-            stepStyle = 'border-indigo-400 bg-indigo-50/90 text-indigo-900 shadow-xs ring-1 ring-indigo-400/50 dark:border-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-200';
-            dotStyle = 'bg-indigo-500 animate-pulse';
-          } else if (isRolledBack && step.key === 'TRANSFERRING') {
-            stepStyle = 'border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300';
-            dotStyle = 'bg-rose-500';
-          }
+      <ol className="relative mt-5 grid grid-cols-7">
+        <li className="absolute top-[11px] right-[7%] left-[7%] h-px bg-line" aria-hidden="true" />
+        {currentIdx > 0 && (
+          <li
+            className={`absolute top-[11px] left-[7%] h-px transition-all duration-500 ${rolledBack ? 'bg-bad/50' : 'bg-ink'}`}
+            style={{ width: `${(Math.min(currentIdx, STEPS.length - 1) / (STEPS.length - 1)) * 86}%` }}
+            aria-hidden="true"
+          />
+        )}
+        {STEPS.map((step, idx) => {
+          const passed = !remote && currentIdx >= 0 && (idx < currentIdx || (done && idx === currentIdx));
+          const current = !remote && !done && idx === currentIdx;
+          const failed = rolledBack && idx === stopIdx;
+          const t0 = startedAt[step.key];
+          const t1 = STEPS.slice(idx + 1).map((s) => startedAt[s.key]).find((t) => t != null);
+          const took = t0 != null ? (t1 ?? (current ? now : undefined)) : undefined;
 
           return (
-            <div
-              key={step.key}
-              data-testid={`step-${step.key.toLowerCase()}`}
-              className={`flex flex-col items-start rounded-lg border p-2.5 transition-all ${stepStyle}`}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className={`h-2 w-2 rounded-full ${dotStyle}`} />
-                <span className="text-[11px] font-bold truncate">{step.label}</span>
-              </div>
-              <span className="mt-1 text-[10px] opacity-80">
-                {isPassed ? 'Validated' : isCurrent ? 'Active...' : isFuture ? 'Pending' : isRolledBack ? 'Aborted' : 'Bypassed'}
+            <li key={step.key} data-testid={`step-${step.key.toLowerCase()}`} className="relative flex flex-col items-center px-1 text-center">
+              <span
+                className={`relative z-10 flex h-[23px] w-[23px] items-center justify-center rounded-full border transition-colors ${
+                  failed
+                    ? 'border-bad bg-bad text-canvas'
+                    : passed
+                      ? 'border-ink bg-ink text-canvas'
+                      : current
+                        ? 'border-accent bg-surface'
+                        : 'border-line-strong bg-surface'
+                }`}
+              >
+                {failed ? (
+                  <Icon name="x" className="h-3 w-3" />
+                ) : passed ? (
+                  <Icon name="check" className="h-3 w-3" />
+                ) : current ? (
+                  <>
+                    <span className="absolute inset-0 animate-ping rounded-full border border-accent" />
+                    <span className="h-2 w-2 rounded-full bg-accent" />
+                  </>
+                ) : null}
               </span>
-            </div>
+              <span className={`mt-2.5 text-[13px] ${current || failed ? 'font-medium text-ink' : passed ? 'text-ink' : 'text-faint'}`}>
+                {step.label}
+              </span>
+              <span className="mt-0.5 hidden text-[10.5px] leading-tight text-faint lg:block">{step.hint}</span>
+              <span className="mt-1 h-3.5 font-mono text-[10.5px] text-muted">
+                {t0 != null && took != null && step.key !== 'COMPLETED' ? seconds(took - t0) : ''}
+              </span>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </div>
   );
 }

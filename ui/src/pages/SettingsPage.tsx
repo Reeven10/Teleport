@@ -1,4 +1,6 @@
+import { PageHeader } from '../components/ui/Icon.tsx';
 import { useEffect, useState } from 'react';
+import { Icon } from '../components/ui/Icon.tsx';
 import { apiGetSettings, apiPutSettings, type SettingsPrefs } from '../api.ts';
 import { useTeleport } from '../store/useTeleport.ts';
 
@@ -118,24 +120,16 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-          Teleport Agent Settings & Policies
-        </h1>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Orchestration decision modes, pressure triggers, transport link policies, and remote access consent
-        </p>
-      </div>
+      <PageHeader eyebrow="Settings" title="How Teleport decides" description="Automatic or recommend-only, when to move, which link to prefer, and who may view this screen." />
 
       {/* Notifications */}
       {saveSuccess && (
         <div
           data-testid="settings-save-success"
-          className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800 shadow-xs dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+          className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
         >
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-100">
-            ✓
+            <Icon name="check" className="h-3 w-3" />
           </span>
           <span>Settings saved successfully to agent operational store.</span>
         </div>
@@ -144,7 +138,7 @@ export function SettingsPage() {
       {errorMessage && (
         <div
           data-testid="settings-error-banner"
-          className="flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800 shadow-xs dark:border-rose-900/60 dark:bg-rose-950/60 dark:text-rose-300"
+          className="flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/60 dark:text-rose-300"
         >
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-100">
             !
@@ -156,11 +150,11 @@ export function SettingsPage() {
       {/* Main Settings Form */}
       <form onSubmit={handleSave} className="space-y-5">
         {/* Card 1: Orchestration Mode */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <h2 className="font-serif text-xl text-ink">
             1. Orchestration Execution Mode
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted">
             Choose whether migrations require manual human approval or execute autonomously upon rule breaches
           </p>
 
@@ -178,13 +172,13 @@ export function SettingsPage() {
                 value="recommend"
                 checked={mode === 'recommend'}
                 onChange={() => setMode('recommend')}
-                className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                className="mt-0.5 text-indigo-600 focus:ring-ink/20"
               />
               <div>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                <span className="text-xs font-bold text-ink">
                   Recommend Mode (Human in the Loop)
                 </span>
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="mt-1 text-[11px] text-muted">
                   Orchestrator generates proactive decision recommendations on the dashboard with full rule evidence.
                   Authority moves only when the operator accepts.
                 </p>
@@ -205,13 +199,13 @@ export function SettingsPage() {
                 data-testid="radio-mode-auto"
                 checked={mode === 'auto'}
                 onChange={() => setMode('auto')}
-                className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                className="mt-0.5 text-indigo-600 focus:ring-ink/20"
               />
               <div>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                <span className="text-xs font-bold text-ink">
                   Autonomous Cutover (Auto Mode)
                 </span>
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="mt-1 text-[11px] text-muted">
                   Orchestrator automatically initiates migration pipeline when pressure thresholds or battery limits
                   are breached. Reverts on checksum failure without downtime.
                 </p>
@@ -221,17 +215,17 @@ export function SettingsPage() {
         </div>
 
         {/* Card 2: Pressure Triggers & Prediction Window */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <h2 className="font-serif text-xl text-ink">
             2. Telemetry Triggers & Pressure Thresholds
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted">
             Define boundary thresholds that trigger feasibility checks and proactive cutover recommendations
           </p>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-bold text-ink/85">
                 Low Battery Limit (%)
               </label>
               <div className="mt-1 flex items-center gap-2">
@@ -242,15 +236,15 @@ export function SettingsPage() {
                   onChange={(e) => setBatteryLowPct(parseFloat(e.target.value))}
                   min={5}
                   max={50}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs font-bold text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 font-mono text-xs font-bold text-ink focus:border-ink/40 focus:outline-hidden"
                 />
-                <span className="text-xs font-bold text-slate-400">%</span>
+                <span className="text-xs font-bold text-faint">%</span>
               </div>
-              <p className="mt-1 text-[10px] text-slate-400">Default: 20% (Valid: 5 - 50%)</p>
+              <p className="mt-1 text-[10px] text-faint">Default: 20% (Valid: 5 - 50%)</p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-bold text-ink/85">
                 CPU Pressure Limit (%)
               </label>
               <div className="mt-1 flex items-center gap-2">
@@ -261,15 +255,15 @@ export function SettingsPage() {
                   onChange={(e) => setCpuHighPct(parseFloat(e.target.value))}
                   min={50}
                   max={99}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs font-bold text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 font-mono text-xs font-bold text-ink focus:border-ink/40 focus:outline-hidden"
                 />
-                <span className="text-xs font-bold text-slate-400">%</span>
+                <span className="text-xs font-bold text-faint">%</span>
               </div>
-              <p className="mt-1 text-[10px] text-slate-400">Default: 90% (Valid: 50 - 99%)</p>
+              <p className="mt-1 text-[10px] text-faint">Default: 90% (Valid: 50 - 99%)</p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-bold text-ink/85">
                 Memory Pressure Limit (%)
               </label>
               <div className="mt-1 flex items-center gap-2">
@@ -280,15 +274,15 @@ export function SettingsPage() {
                   onChange={(e) => setMemHighPct(parseFloat(e.target.value))}
                   min={50}
                   max={99}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs font-bold text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 font-mono text-xs font-bold text-ink focus:border-ink/40 focus:outline-hidden"
                 />
-                <span className="text-xs font-bold text-slate-400">%</span>
+                <span className="text-xs font-bold text-faint">%</span>
               </div>
-              <p className="mt-1 text-[10px] text-slate-400">Default: 90% (Valid: 50 - 99%)</p>
+              <p className="mt-1 text-[10px] text-faint">Default: 90% (Valid: 50 - 99%)</p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-bold text-ink/85">
                 Prediction Window (Seconds)
               </label>
               <div className="mt-1 flex items-center gap-2">
@@ -299,46 +293,46 @@ export function SettingsPage() {
                   onChange={(e) => setPredictionWindowSec(parseInt(e.target.value, 10))}
                   min={10}
                   max={300}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs font-bold text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 font-mono text-xs font-bold text-ink focus:border-ink/40 focus:outline-hidden"
                 />
-                <span className="text-xs font-bold text-slate-400">sec</span>
+                <span className="text-xs font-bold text-faint">sec</span>
               </div>
-              <p className="mt-1 text-[10px] text-slate-400">Linear trend extrapolation (10 - 300s)</p>
+              <p className="mt-1 text-[10px] text-faint">Linear trend extrapolation (10 - 300s)</p>
             </div>
           </div>
         </div>
 
         {/* Card 3: Transport Link & Checkpoint Chunking */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <h2 className="font-serif text-xl text-ink">
             3. Peer Transport & State Serialization
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted">
             Network physical link preference and chunk fragmentation parameters
           </p>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-bold text-ink/85">
                 Preferred Peer Transport Link
               </label>
               <select
                 data-testid="select-preferred-link"
                 value={preferredLink}
                 onChange={(e) => setPreferredLink(e.target.value as 'auto' | 'cable' | 'wifi')}
-                className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="mt-1 block w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-xs font-bold text-ink focus:border-ink/40 focus:outline-hidden"
               >
                 <option value="auto">Automatic (Highest Throughput / Lowest RTT)</option>
                 <option value="cable">Wired Cable Only (Ethernet/Thunderbolt direct)</option>
                 <option value="wifi">Wireless Wi-Fi (802.11ax/ac link)</option>
               </select>
-              <p className="mt-1 text-[10px] text-slate-400">
+              <p className="mt-1 text-[10px] text-faint">
                 Auto dynamically transitions state transfer if cable is unplugged.
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-bold text-ink/85">
                 Checkpoint Chunk Size (KB)
               </label>
               <input
@@ -349,9 +343,9 @@ export function SettingsPage() {
                 min={16}
                 max={512}
                 step={16}
-                className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs font-bold text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="mt-1 block w-full rounded-xl border border-line-strong bg-surface px-3 py-2 font-mono text-xs font-bold text-ink focus:border-ink/40 focus:outline-hidden"
               />
-              <p className="mt-1 text-[10px] text-slate-400">
+              <p className="mt-1 text-[10px] text-faint">
                 Chunk buffer size for streaming SHA-256 validation (16 KB - 512 KB, default 256 KB).
               </p>
             </div>
@@ -359,11 +353,11 @@ export function SettingsPage() {
         </div>
 
         {/* Card 4: Remote Access Consent Behavior */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <h2 className="font-serif text-xl text-ink">
             4. Remote Access Consent Policy
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted">
             Authorization behavior when peer devices request screen viewing and input injection fallback
           </p>
 
@@ -384,8 +378,8 @@ export function SettingsPage() {
                 className="mt-0.5 text-sky-600 focus:ring-sky-500"
               />
               <div>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">Prompt Every Time</span>
-                <p className="mt-0.5 text-[10px] text-slate-500">Always show modal requiring explicit approval.</p>
+                <span className="text-xs font-bold text-ink">Prompt Every Time</span>
+                <p className="mt-0.5 text-[10px] text-muted">Always show modal requiring explicit approval.</p>
               </div>
             </label>
 
@@ -405,8 +399,8 @@ export function SettingsPage() {
                 className="mt-0.5 text-sky-600 focus:ring-sky-500"
               />
               <div>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">Auto-Allow Paired</span>
-                <p className="mt-0.5 text-[10px] text-slate-500">Grant viewing immediately if peer was previously paired.</p>
+                <span className="text-xs font-bold text-ink">Auto-Allow Paired</span>
+                <p className="mt-0.5 text-[10px] text-muted">Grant viewing immediately if peer was previously paired.</p>
               </div>
             </label>
 
@@ -426,23 +420,23 @@ export function SettingsPage() {
                 className="mt-0.5 text-sky-600 focus:ring-sky-500"
               />
               <div>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">Deny All Requests</span>
-                <p className="mt-0.5 text-[10px] text-slate-500">Reject all remote viewport and input injection requests.</p>
+                <span className="text-xs font-bold text-ink">Deny All Requests</span>
+                <p className="mt-0.5 text-[10px] text-muted">Reject all remote viewport and input injection requests.</p>
               </div>
             </label>
           </div>
         </div>
 
         {/* Save Bar */}
-        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <span className="text-xs text-slate-500">
+        <div className="flex items-center justify-between rounded-2xl border border-line bg-raised p-4">
+          <span className="text-xs text-muted">
             {loading ? 'Fetching current agent configuration...' : 'Changes apply immediately to running agent daemon.'}
           </span>
           <button
             type="submit"
             data-testid="btn-save-settings"
             disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+            className="tp-btn-primary"
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
@@ -450,18 +444,18 @@ export function SettingsPage() {
       </form>
 
       {/* Developer & Simulation Feeder Controls */}
-      <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Developer & Display Environment</h3>
+      <div className="space-y-4 pt-4 border-t border-line">
+        <h3 className="tp-label">Developer & Display Environment</h3>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* Mock Feeder Toggle */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-            <h4 className="text-xs font-bold text-slate-900 dark:text-white">Mock BusEvent Feeder</h4>
-            <p className="mt-1 text-[11px] text-slate-500">
+          <div className="rounded-xl border border-line bg-surface p-5">
+            <h4 className="text-xs font-bold text-ink">Mock BusEvent Feeder</h4>
+            <p className="mt-1 text-[11px] text-muted">
               Generates realistic live stats, simulated battery drain, link quality oscillations, and migration scenarios.
             </p>
             <div className="mt-3 flex items-center justify-between">
-              <span className="font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <span className="font-mono text-xs font-semibold text-muted">
                 {state.mockFeederActive ? 'Status: ACTIVE' : 'Status: STOPPED'}
               </span>
               <button
@@ -478,20 +472,20 @@ export function SettingsPage() {
           </div>
 
           {/* Theme Selector */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-            <h4 className="text-xs font-bold text-slate-900 dark:text-white">Theme & Display Contrast</h4>
-            <p className="mt-1 text-[11px] text-slate-500">
+          <div className="rounded-xl border border-line bg-surface p-5">
+            <h4 className="text-xs font-bold text-ink">Theme & Display Contrast</h4>
+            <p className="mt-1 text-[11px] text-muted">
               Switch between Light and Dark control-room palettes with high-contrast color badges.
             </p>
             <div className="mt-3 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <span className="text-xs font-semibold text-muted">
                 Current: <strong className="uppercase">{state.theme}</strong>
               </span>
               <button
                 type="button"
                 data-testid="btn-toggle-theme"
                 onClick={() => toggleTheme()}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="tp-btn"
               >
                 Switch to {state.theme === 'dark' ? 'Light' : 'Dark'}
               </button>

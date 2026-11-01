@@ -20,7 +20,7 @@ export function createInitialState(): TeleportState {
     agentReachable: false,
     // Off until the agent turns out to be unreachable: a live demo must never show mock data.
     mockFeederActive: false,
-    theme: savedTheme ?? 'dark',
+    theme: savedTheme ?? 'light',
     isSimulated: true,
   };
 }

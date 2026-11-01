@@ -16,11 +16,11 @@ export function DecisionLogPanel({ decisions }: DecisionLogPanelProps) {
   const getDecisionBadge = (decision: Decision) => {
     switch (decision) {
       case 'MIGRATE':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300';
+        return 'border border-line text-ink';
       case 'REMOTE_ACCESS':
-        return 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300';
+        return 'border border-steel/40 text-steel';
       case 'STAY':
-        return 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300';
+        return 'border border-line text-muted';
     }
   };
 
@@ -47,14 +47,14 @@ export function DecisionLogPanel({ decisions }: DecisionLogPanelProps) {
   return (
     <div
       data-testid="decision-log-panel"
-      className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900"
+      className="rounded-2xl border border-line bg-surface p-5"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+          <h2 className="font-serif text-xl text-ink">
             Feasibility & Orchestrator Decision Audit Log ({decisions.length})
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Audit trail of rule evaluations including migrations, remote access cutovers, and decisions that led to nothing (STAY)
           </p>
         </div>
@@ -111,7 +111,7 @@ export function DecisionLogPanel({ decisions }: DecisionLogPanelProps) {
 
       <div className="mt-4 space-y-3">
         {filtered.length === 0 ? (
-          <p className="py-6 text-center text-xs italic text-slate-400">
+          <p className="py-6 text-center text-xs italic text-faint">
             No decision audit records match the selected category.
           </p>
         ) : (
@@ -122,15 +122,15 @@ export function DecisionLogPanel({ decisions }: DecisionLogPanelProps) {
               <div
                 key={log.id}
                 data-testid={`decision-log-item-${log.id}`}
-                className="rounded-xl border border-slate-200/90 bg-slate-50/40 p-4 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800/30"
+                className="rounded-xl border border-line bg-raised p-4 transition hover:bg-raised"
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
-                    <span className={`rounded-md px-2.5 py-0.5 text-xs font-black uppercase ${getDecisionBadge(log.decision)}`}>
+                    <span className={`rounded-md px-2.5 py-0.5 text-xs font-semibold uppercase ${getDecisionBadge(log.decision)}`}>
                       {log.decision}
                     </span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">
-                      Workload: <span className="font-mono text-indigo-600 dark:text-indigo-400">{log.workloadId}</span>
+                    <span className="font-semibold text-ink text-xs">
+                      Workload: <span className="font-mono text-ink">{log.workloadId}</span>
                     </span>
                     {isStay && (
                       <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200">
@@ -139,8 +139,8 @@ export function DecisionLogPanel({ decisions }: DecisionLogPanelProps) {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400">
-                    <span>Trigger: <strong className="text-slate-600 dark:text-slate-300">{log.trigger}</strong></span>
+                  <div className="flex items-center gap-3 font-mono text-[11px] text-faint">
+                    <span>Trigger: <strong className="text-muted">{log.trigger}</strong></span>
                     <span>{formatTimestamp(log.ts)}</span>
                   </div>
                 </div>
@@ -151,13 +151,13 @@ export function DecisionLogPanel({ decisions }: DecisionLogPanelProps) {
                       <span className={`rounded px-1.5 py-0.2 font-mono text-[9px] font-bold uppercase border ${getSeverityBadge(r.severity)}`}>
                         {r.code}
                       </span>
-                      <span className="text-slate-600 dark:text-slate-300 text-[11px]">{r.text}</span>
+                      <span className="text-muted text-[11px]">{r.text}</span>
                     </div>
                   ))}
                 </div>
 
                 {log.migrationId && (
-                  <div className="mt-2 text-[10px] font-mono text-slate-400">
+                  <div className="mt-2 text-[10px] font-mono text-faint">
                     Linked Migration: <span className="text-blue-500 font-semibold">{log.migrationId}</span>
                   </div>
                 )}

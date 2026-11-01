@@ -656,11 +656,12 @@ class MigrationManager:
         run.outgoing.mkdir(parents=True, exist_ok=True)
         out: builtins.list[CheckpointRecord] = []
         for cid in ids:
-            data, rec = self.store.read(wid, cid), self.store.record(wid, cid)
-            if data is None or rec is None:
+            pair = self.store.read_with_record(wid, cid)
+            if pair is None:
                 if skip_missing:
                     continue
                 raise MigrationError(f"Checkpoint {cid} was never saved by the workload.")
+            data, rec = pair
             (run.outgoing / f"{cid}.tar.gz").write_bytes(data)
             out.append(
                 CheckpointRecord(
