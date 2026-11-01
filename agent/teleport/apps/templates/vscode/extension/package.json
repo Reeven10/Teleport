@@ -1,0 +1,11 @@
+{
+  "name": "teleport-session",
+  "displayName": "Teleport session",
+  "description": "Saves and restores open tabs, cursors and unsaved edits so a Teleport migration keeps the editor state.",
+  "version": "0.1.0",
+  "publisher": "teleport",
+  "engines": { "vscode": "^1.80.0" },
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {}
+}

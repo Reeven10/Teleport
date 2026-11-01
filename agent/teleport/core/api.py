@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from typing import Any
@@ -45,6 +46,11 @@ class MigrationRequest(BaseModel):
     workloadId: str
     targetId: str
     trigger: Trigger = "user_command"
+
+
+class VSCodeAppRequest(BaseModel):
+    projectPath: str
+    name: str | None = None
 
 
 class PrecopyRequest(BaseModel):
@@ -114,6 +120,32 @@ def build_router(ctx: Context, history_routes: bool = True) -> APIRouter:
             "ts": time.time(),
         }
 
+    @r.get("/apps")
+    async def apps() -> list[dict[str, Any]]:
+        """Ready-made workloads for the Workloads page (no manifest path needed)."""
+        from ..apps import gallery
+
+        return await asyncio.to_thread(gallery)
+
+    @r.post("/apps/vscode")
+    async def open_vscode(req: VSCodeAppRequest) -> WorkloadManifest:
+        """Open a project folder of this device in VS Code as a migratable workload."""
+        from ..apps import create_vscode_workload
+
+        try:
+            folder = await asyncio.to_thread(
+                create_vscode_workload, ctx.settings.home, req.projectPath, req.name
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return await ctx.workloads.launch(str(folder))
+
+    @r.get("/discovery")
+    async def discovery() -> list[dict[str, Any]]:
+        """Teleport agents heard on the LAN; pair with one by its `addr` and the PIN it shows."""
+        service: Any = dict(ctx.services()).get("discovery")
+        return service.nearby() if service is not None else []
+
     @r.get("/devices")
     async def devices() -> list[DeviceInfo]:
         return ctx.devices.list_devices()
@@ -138,6 +170,12 @@ def build_router(ctx: Context, history_routes: bool = True) -> APIRouter:
     def settings_view() -> dict[str, Any]:
         # checkpointChunkKb mirrors chunkSizeKb until the dashboard uses the real name (P4).
         return {**ctx.prefs.model_dump(), "checkpointChunkKb": ctx.prefs.chunkSizeKb}
+
+    @r.post("/workloads/{workload_id}/stop")
+    async def workload_stop(workload_id: str) -> WorkloadRun:
+        """Stop a workload running here (it saves its state first if it can)."""
+        find_workload(workload_id)
+        return await ctx.workloads.terminate(workload_id, grace=5.0)
 
     @r.get("/settings")
     async def get_settings() -> dict[str, Any]:

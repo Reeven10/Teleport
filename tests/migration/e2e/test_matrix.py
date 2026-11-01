@@ -122,7 +122,6 @@ def test_t1b_low_battery_recommend_mode_only_recommends(dev_two: tuple[Agent, Ag
         events.close()
 
 
-@pytest.mark.xfail(strict=True, reason="P3-6: triggers on a peer's stats act on this device's workloads")
 def test_t1c_peer_low_battery_does_not_move_local_workloads(dev_two: tuple[Agent, Agent]) -> None:
     a, b = dev_two
     pair(a, b)

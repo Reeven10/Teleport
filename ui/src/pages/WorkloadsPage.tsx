@@ -1,13 +1,57 @@
-import { useState } from 'react';
-import { apiStartWorkload } from '../api.ts';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  apiFetchApps,
+  apiOpenVSCodeProject,
+  apiStartMigration,
+  apiStartWorkload,
+  apiStopWorkload,
+  type AppTemplate,
+} from '../api.ts';
 import { useTeleport } from '../store/useTeleport.ts';
 import type { WorkloadItem } from '../store/types.ts';
 import { formatMb } from '../utils/formatters.ts';
 
 export function WorkloadsPage() {
-  const { state } = useTeleport();
+  const { state, addWorkload } = useTeleport();
+  const navigate = useNavigate();
   const [isStartOpen, setIsStartOpen] = useState(false);
-  const [manifestPath, setManifestPath] = useState('examples/migratable_ml_trainer/manifest.json');
+  const [manifestPath, setManifestPath] = useState('tests/fixtures/counter_job');
+  const [apps, setApps] = useState<AppTemplate[]>([]);
+  const [projectPath, setProjectPath] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!state.agentReachable) return;
+    apiFetchApps().then(setApps).catch(() => setApps([]));
+  }, [state.agentReachable]);
+
+  async function startApp(app: AppTemplate) {
+    setBusy(app.id);
+    setActionMessage(null);
+    const res =
+      app.id === 'vscode'
+        ? await apiOpenVSCodeProject(projectPath)
+        : await apiStartWorkload(app.manifestPath ?? '').then((r) => ({ ...r, manifest: undefined }));
+    setBusy(null);
+    if (!res.ok) {
+      setActionMessage(`Could not start ${app.title}: ${res.error ?? 'unknown error'}`);
+      return;
+    }
+    if ('manifest' in res && res.manifest) addWorkload({ manifest: res.manifest, status: 'RUNNING' });
+    setActionMessage(`${app.title} is running on this device. Use "Migrate" to move it.`);
+  }
+
+  async function migrateTo(wl: WorkloadItem, targetId: string, targetName: string) {
+    setIsTargetPickerOpen(false);
+    setActionMessage(`Starting the migration of ${wl.manifest.name} to ${targetName}...`);
+    try {
+      await apiStartMigration(wl.manifest.id, targetId, 'user_command');
+      navigate('/migration'); // the steps update live there
+    } catch (err: unknown) {
+      setActionMessage(`Migration not started: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   const [selectedWorkload, setSelectedWorkload] = useState<WorkloadItem | null>(null);
   const [isTargetPickerOpen, setIsTargetPickerOpen] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -77,6 +121,40 @@ export function WorkloadsPage() {
         </div>
       )}
 
+      {/* Ready-made apps: one click, no manifest path */}
+      {state.agentReachable && apps.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2" data-testid="app-gallery">
+          {apps.map((app) => (
+            <div
+              key={app.id}
+              data-testid={`app-${app.id}`}
+              className="rounded-xl border border-slate-200 bg-white/90 p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/80"
+            >
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">{app.title}</h2>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{app.description}</p>
+              {app.needs === 'projectPath' && (
+                <input
+                  type="text"
+                  value={projectPath}
+                  onChange={(e) => setProjectPath(e.target.value)}
+                  placeholder="Project folder on this device, e.g. C:\Users\me\projects\demo"
+                  className="mt-3 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              )}
+              {!app.available && app.detail && <p className="mt-2 text-xs text-rose-600">{app.detail}</p>}
+              <button
+                type="button"
+                disabled={!app.available || busy !== null || (app.needs === 'projectPath' && !projectPath.trim())}
+                onClick={() => void startApp(app)}
+                className="mt-3 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy === app.id ? 'Starting...' : app.id === 'vscode' ? 'Open in VS Code' : 'Start'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Workload Cards List */}
       <div className="space-y-4">
         {state.workloads.length === 0 ? (
@@ -118,6 +196,18 @@ export function WorkloadsPage() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
+                    {wl.status === 'RUNNING' && (
+                      <button
+                        onClick={() =>
+                          void apiStopWorkload(m.id)
+                            .then(() => setActionMessage(`${m.name} stopped.`))
+                            .catch((err: unknown) => setActionMessage(`Could not stop: ${err instanceof Error ? err.message : String(err)}`))
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        Stop
+                      </button>
+                    )}
                     <button
                       onClick={() => handleOpenMigrate(wl)}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-500 transition-all"
@@ -263,12 +353,7 @@ export function WorkloadsPage() {
                       </p>
                     </div>
                     <button
-                      onClick={() => {
-                        setIsTargetPickerOpen(false);
-                        setActionMessage(
-                          `Target "${peer.name}" selected. Migration engine handover will be wired in Phase 2.`,
-                        );
-                      }}
+                      onClick={() => void migrateTo(selectedWorkload, peer.id, peer.name)}
                       className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
                     >
                       Evaluate & Migrate
@@ -292,3 +377,4 @@ export function WorkloadsPage() {
     </div>
   );
 }
+

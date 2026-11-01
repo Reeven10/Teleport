@@ -18,7 +18,8 @@ export function createInitialState(): TeleportState {
     authorityConflict: null,
     wsConnected: false,
     agentReachable: false,
-    mockFeederActive: true,
+    // Off until the agent turns out to be unreachable: a live demo must never show mock data.
+    mockFeederActive: false,
     theme: savedTheme ?? 'dark',
     isSimulated: true,
   };
@@ -58,6 +59,10 @@ export function storeReducer(state: TeleportState, action: StoreAction): Telepor
   switch (action.type) {
     case 'INIT_REST': {
       const { thisDeviceId, devices, stats, workloads, migrations, workloadRuns, remoteSessions } = action.payload;
+      if (thisDeviceId && state.mockFeederActive) {
+        // Real agent data replaces the mock session: start from a clean slate, keep only the theme.
+        state = { ...createInitialState(), theme: state.theme, wsConnected: state.wsConnected };
+      }
       const deviceMap: Record<string, DeviceInfo> = {};
       let thisDev = thisDeviceId || state.thisDeviceId;
 
@@ -100,9 +105,9 @@ export function storeReducer(state: TeleportState, action: StoreAction): Telepor
         });
       }
 
-      // Check latest migration and authority (P4-6)
-      let nextMig: MigrationStatus | null = state.migrationStatus;
-      let nextAuth = state.authority;
+      // Check latest migration and authority (P4-6). With real data, no migrations means none.
+      let nextMig: MigrationStatus | null = thisDeviceId ? null : state.migrationStatus;
+      let nextAuth = thisDeviceId ? null : state.authority;
       if (migrations && migrations.length > 0) {
         const sorted = [...migrations].sort((a, b) => b.startedAt - a.startedAt);
         const latest = sorted[0];
@@ -115,7 +120,7 @@ export function storeReducer(state: TeleportState, action: StoreAction): Telepor
       }
 
       // Check remote sessions
-      let nextRemote: RemoteSession | null = state.remoteSession;
+      let nextRemote: RemoteSession | null = thisDeviceId ? null : state.remoteSession;
       if (remoteSessions && remoteSessions.length > 0) {
         nextRemote = remoteSessions[remoteSessions.length - 1] ?? null;
       }
@@ -136,6 +141,16 @@ export function storeReducer(state: TeleportState, action: StoreAction): Telepor
       };
       nextState.isSimulated = checkSimulated(nextState);
       return nextState;
+    }
+
+    case 'SET_WORKLOADS': {
+      // Periodic refresh: workloads started here, or migrated in from another device, appear by themselves.
+      const runs = new Map(action.payload.runs.map((run) => [run.workloadId, run]));
+      const workloads: WorkloadItem[] = action.payload.workloads.map((w) => {
+        const run = runs.get(w.manifest.id);
+        return run ? { ...w, status: run.state === 'running' ? 'RUNNING' : 'STOPPED' } : w;
+      });
+      return { ...state, workloads };
     }
 
     case 'BUS_EVENT': {
@@ -276,7 +291,7 @@ function handleBusEvent(state: TeleportState, event: BusEvent): TeleportState {
     }
 
     case 'migration.status': {
-      return { ...state, migrationStatus: event.status };
+      return { ...state, migrationStatus: event.status, authority: event.status.authority ?? state.authority };
     }
 
     case 'authority.change': {

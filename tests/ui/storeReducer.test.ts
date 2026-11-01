@@ -7,7 +7,7 @@ describe('storeReducer', () => {
     const state = createInitialState();
     expect(state.thisDeviceId).toBe('');
     expect(state.peerDeviceId).toBeNull();
-    expect(state.mockFeederActive).toBe(true);
+    expect(state.mockFeederActive).toBe(false); // mock data only once the agent is known to be unreachable
     expect(state.isSimulated).toBe(true);
   });
 
