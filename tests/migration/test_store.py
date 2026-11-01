@@ -132,3 +132,34 @@ def test_chunks_from_file(tmp_path: Path) -> None:
     path = tmp_path / "unit"
     path.write_bytes(os.urandom(CHUNK_SIZE + 10))
     assert b"".join(c.data for c in iter_chunks(path)) == path.read_bytes()
+
+
+def test_checkpoints_keep_landing_while_a_migration_reads_them(tmp_path: Path) -> None:
+    """A job checkpointing every few ms while the migration snapshots the same unit: on Windows an
+    unlocked read made the save fail with WinError 5, the job crashed and the migration rolled back."""
+    import threading
+
+    store = CheckpointStore(tmp_path)
+    store.put("wl", "counter", pack_unit({"count": 0}, []))
+    errors: list[BaseException] = []
+    stop = threading.Event()
+
+    def writer() -> None:
+        try:
+            for i in range(300):
+                store.put("wl", "counter", pack_unit({"count": i + 1}, []))
+        except BaseException as e:  # noqa: BLE001 - the test reports whatever broke
+            errors.append(e)
+        finally:
+            stop.set()
+
+    t = threading.Thread(target=writer)
+    t.start()
+    reads = 0
+    while not stop.is_set():
+        pair = store.read_with_record("wl", "counter")
+        assert pair is not None and sha256_hex(pair[0]) == pair[1].sha256  # always a consistent pair
+        reads += 1
+    t.join()
+    assert not errors, errors
+    assert reads > 0

@@ -49,7 +49,7 @@ test('navigates to Workloads page and shows workload summary', async () => {
   fireEvent.click(workloadsNav);
 
   await waitFor(() => {
-    expect(screen.getByText(/Workload Registry & Feasibility/i)).toBeInTheDocument();
+    expect(screen.getByText(/What runs here/i)).toBeInTheDocument();
     expect(screen.getByTestId('workload-card-wl-token-trainer')).toBeInTheDocument();
   });
 });

@@ -185,221 +185,100 @@ export function DemoControlPanel() {
     showStatus(`Applied custom overrides to ${targetDevice}`);
   };
 
+  const slider = (label: string, value: number, unit: string, min: number, max: number, set: (n: number) => void) => (
+    <label className="block">
+      <span className="flex items-baseline justify-between text-xs text-muted">
+        {label}
+        <span className="font-mono text-ink">
+          {value}
+          {unit}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => set(Number(e.target.value))}
+        className="mt-1.5 h-1 w-full cursor-pointer accent-[var(--tp-ink)]"
+      />
+    </label>
+  );
+
   return (
-    <div
-      data-testid="demo-control-panel"
-      className="overflow-hidden rounded-2xl border-2 border-dashed border-amber-500/80 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-purple-500/10 p-5 shadow-md backdrop-blur-xs dark:border-amber-400/80 dark:bg-amber-950/20"
-    >
-      {/* Panel Top Header Bar */}
+    <div data-testid="demo-control-panel" className="rounded-2xl border border-dashed border-warn/50 bg-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-950 shadow-xs">
-            <span className="h-2 w-2 animate-ping rounded-full bg-white opacity-80" />
-            SIMULATED
-          </span>
-          <span className="text-sm font-black tracking-wide text-amber-900 dark:text-amber-200">
-            DEMO FAULT INJECTOR & STATS OVERRIDE
-          </span>
-          {statusMsg && (
-            <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-              {statusMsg}
-            </span>
-          )}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="tp-chip border-warn/40 bg-warn-soft text-warn">SIMULATED</span>
+          <span className="tp-label uppercase">DEMO FAULT INJECTOR & STATS OVERRIDE</span>
+          {statusMsg && <span className="text-xs text-ok">{statusMsg}</span>}
         </div>
-
-        <div className="flex items-center gap-3">
-          {/* Target device picker */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <label htmlFor="target-device-select" className="font-semibold text-slate-700 dark:text-slate-300">
-              Target:
-            </label>
-            <select
-              id="target-device-select"
-              value={targetDevice}
-              onChange={(e) => setTargetDevice(e.target.value)}
-              className="rounded-lg border border-amber-300 bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-900 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-200"
-            >
-              {Object.keys(state.devices).length > 0 ? (
-                Object.values(state.devices).map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.id})
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="device-a">Device A (MacBook Pro)</option>
-                  <option value="device-b">Device B (Workstation)</option>
-                </>
-              )}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setCollapsed(!collapsed)}
-            className="rounded-lg border border-amber-300/80 bg-white/80 px-2.5 py-1 text-xs font-bold text-amber-900 transition hover:bg-white dark:border-amber-800 dark:bg-slate-900/80 dark:text-amber-200"
+        <div className="flex items-center gap-2">
+          <label htmlFor="target-device-select" className="text-xs text-muted">
+            Device
+          </label>
+          <select
+            id="target-device-select"
+            value={targetDevice}
+            onChange={(e) => setTargetDevice(e.target.value)}
+            className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-xs text-ink"
           >
-            {collapsed ? 'Expand Controls ▼' : 'Collapse ▲'}
+            {Object.keys(state.devices).length > 0 ? (
+              Object.values(state.devices).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))
+            ) : (
+              <>
+                <option value="device-a">Device A (MacBook Pro)</option>
+                <option value="device-b">Device B (Workstation)</option>
+              </>
+            )}
+          </select>
+          <button type="button" onClick={() => setCollapsed(!collapsed)} className="tp-btn">
+            {collapsed ? 'Show controls' : 'Hide'}
           </button>
         </div>
       </div>
 
-      {/* Collapsible Content */}
       {!collapsed && (
-        <div className="mt-4 space-y-4">
-          {/* Action Buttons Row */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <button
-              type="button"
-              data-testid="btn-drain-battery"
-              onClick={handleDrainBattery}
-              className="flex items-center justify-center gap-2 rounded-xl border border-amber-400 bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 shadow-xs transition hover:bg-amber-400 active:scale-95"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
+        <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-[auto_1fr]">
+          <div className="flex flex-wrap content-start gap-2 lg:w-56">
+            <button type="button" data-testid="btn-drain-battery" onClick={handleDrainBattery} className="tp-btn">
               Drain battery
             </button>
-
-            <button
-              type="button"
-              data-testid="btn-cpu-spike"
-              onClick={handleCpuSpike}
-              className="flex items-center justify-center gap-2 rounded-xl border border-orange-400 bg-orange-500 px-3 py-2 text-xs font-bold text-slate-950 shadow-xs transition hover:bg-orange-400 active:scale-95"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+            <button type="button" data-testid="btn-cpu-spike" onClick={handleCpuSpike} className="tp-btn">
               CPU spike
             </button>
-
-            <button
-              type="button"
-              data-testid="btn-drop-wifi"
-              onClick={handleDropWifi}
-              className="flex items-center justify-center gap-2 rounded-xl border border-rose-400 bg-rose-500 px-3 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-rose-400 active:scale-95"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.121-4.243m16.97-4.243a8.955 8.955 0 00-2.828-2.828" />
-              </svg>
+            <button type="button" data-testid="btn-drop-wifi" onClick={handleDropWifi} className="tp-btn">
               Drop wifi
             </button>
-
-            <button
-              type="button"
-              data-testid="btn-reset-telemetry"
-              onClick={handleReset}
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-xs transition hover:bg-slate-100 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+            <button type="button" data-testid="btn-reset-telemetry" onClick={handleReset} className="tp-btn">
               Reset
             </button>
           </div>
-
-          {/* Sliders Grid for Custom Manual Tuning */}
-          <div className="grid grid-cols-1 gap-4 rounded-xl border border-amber-300/40 bg-white/70 p-4 sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-900/60">
-            {/* Battery Slider + Charging toggle */}
-            <div>
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <span>Battery Level</span>
-                <span className="font-mono font-bold text-amber-700 dark:text-amber-300">{batteryPct}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={batteryPct}
-                onChange={(e) => setBatteryPct(Number(e.target.value))}
-                className="mt-1 h-2 w-full accent-amber-500"
-              />
-              <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-                <input
-                  type="checkbox"
-                  checked={charging}
-                  onChange={(e) => setCharging(e.target.checked)}
-                  className="rounded text-amber-600 focus:ring-amber-500"
-                />
-                <span>AC Charging Connected</span>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-3">
+            <div className="space-y-2">
+              {slider('Battery', batteryPct, '%', 0, 100, setBatteryPct)}
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                <input type="checkbox" checked={charging} onChange={(e) => setCharging(e.target.checked)} />
+                Charging
               </label>
             </div>
-
-            {/* CPU & Memory Sliders */}
-            <div className="space-y-2">
-              <div>
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  <span>CPU Usage</span>
-                  <span className="font-mono font-bold text-orange-600 dark:text-orange-400">{cpuPct}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={cpuPct}
-                  onChange={(e) => setCpuPct(Number(e.target.value))}
-                  className="mt-1 h-2 w-full accent-orange-500"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  <span>Memory Usage</span>
-                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{memPct}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={memPct}
-                  onChange={(e) => setMemPct(Number(e.target.value))}
-                  className="mt-1 h-2 w-full accent-indigo-500"
-                />
-              </div>
+            <div className="space-y-3">
+              {slider('CPU', cpuPct, '%', 0, 100, setCpuPct)}
+              {slider('Memory', memPct, '%', 0, 100, setMemPct)}
             </div>
-
-            {/* Link Fault Injection (Latency & Loss) */}
-            <div className="space-y-2">
-              <div>
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  <span>Link RTT Latency</span>
-                  <span className="font-mono font-bold text-rose-600 dark:text-rose-400">{latencyMs} ms</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={500}
-                  value={latencyMs}
-                  onChange={(e) => setLatencyMs(Number(e.target.value))}
-                  className="mt-1 h-2 w-full accent-rose-500"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  <span>Packet Loss</span>
-                  <span className="font-mono font-bold text-rose-600 dark:text-rose-400">{lossPct}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={50}
-                  value={lossPct}
-                  onChange={(e) => setLossPct(Number(e.target.value))}
-                  className="mt-1 h-2 w-full accent-rose-500"
-                />
-              </div>
+            <div className="space-y-3">
+              {slider('Link round trip', latencyMs, ' ms', 1, 500, setLatencyMs)}
+              {slider('Packet loss', lossPct, '%', 0, 50, setLossPct)}
             </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={handleApplyCustom}
-              className="rounded-xl bg-slate-900 px-4 py-1.5 text-xs font-bold text-white shadow-xs transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-            >
-              Apply Custom Overrides
-            </button>
+            <div className="sm:col-span-3 flex justify-end">
+              <button type="button" onClick={handleApplyCustom} className="tp-btn-primary">
+                Apply
+              </button>
+            </div>
           </div>
         </div>
       )}

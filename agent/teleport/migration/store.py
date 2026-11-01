@@ -43,10 +43,34 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def replace_file(src: Path, dst: Path, attempts: int = 40) -> None:
+    """os.replace that survives Windows sharing violations.
+
+    Windows refuses to replace a file while another handle has it open (a reader, Defender, the search
+    indexer); those holds last milliseconds, so retry for up to ~1 s instead of failing the checkpoint.
+    """
+    for attempt in range(attempts):
+        try:
+            src.replace(dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.025)
+
+
+def write_atomic(path: Path, data: bytes) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    replace_file(tmp, path)
+
+
 class CheckpointStore:
     def __init__(self, home: Path) -> None:
         self.root = home / "workloads"
-        self._lock = threading.Lock()
+        # One lock for every read and write: a unit is never read while it is being replaced, which
+        # Windows does not allow (WinError 5) and which could hand out a half-written meta.json.
+        self._lock = threading.RLock()
 
     def workload_dir(self, workload_id: str) -> Path:
         return self.root / _check_id("workload", workload_id)
@@ -80,10 +104,8 @@ class CheckpointStore:
                 sha256=digest,
                 createdAt=time.time(),
             )
-            tmp = folder / (UNIT + ".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(folder / UNIT)
-            (folder / META).write_text(record.model_dump_json(), "utf-8")
+            write_atomic(folder / UNIT, data)
+            write_atomic(folder / META, record.model_dump_json().encode())
             return record
 
     def adopt(
@@ -100,8 +122,8 @@ class CheckpointStore:
             stored = record.model_copy(
                 update={"seq": self._next_seq(workload_id), "sent": None, "validated": None}
             )
-            path.replace(folder / UNIT)
-            (folder / META).write_text(stored.model_dump_json(), "utf-8")
+            replace_file(path, folder / UNIT)
+            write_atomic(folder / META, stored.model_dump_json().encode())
             return stored
 
     def pack_paths(
@@ -112,13 +134,21 @@ class CheckpointStore:
 
     def read(self, workload_id: str, checkpoint_id: str) -> bytes | None:
         path = self.unit_path(workload_id, checkpoint_id)
-        return path.read_bytes() if path.exists() else None
+        with self._lock:
+            return path.read_bytes() if path.exists() else None
+
+    def read_with_record(self, workload_id: str, checkpoint_id: str) -> tuple[bytes, CheckpointRecord] | None:
+        """The unit and its record as one consistent pair (a checkpoint cannot land in between)."""
+        with self._lock:
+            data, record = self.read(workload_id, checkpoint_id), self.record(workload_id, checkpoint_id)
+            return (data, record) if data is not None and record is not None else None
 
     def record(self, workload_id: str, checkpoint_id: str) -> CheckpointRecord | None:
         path = self.unit_dir(workload_id, checkpoint_id) / META
-        if not path.exists():
-            return None
-        return CheckpointRecord.model_validate_json(path.read_text("utf-8"))
+        with self._lock:
+            if not path.exists():
+                return None
+            return CheckpointRecord.model_validate_json(path.read_text("utf-8"))
 
     def records(self, workload_id: str) -> list[CheckpointRecord]:
         base = self.workload_dir(workload_id) / "checkpoints"

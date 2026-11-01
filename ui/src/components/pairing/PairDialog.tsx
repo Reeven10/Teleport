@@ -110,18 +110,18 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
   const pairedList = Object.values(state.devices);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+      <div className="w-full max-w-xl rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-line pb-3">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Pair New Device</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <h2 className="text-lg font-bold text-ink">Pair New Device</h2>
+            <p className="text-xs text-muted">
               Establish an encrypted Ed25519 identity exchange with a peer agent
             </p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-lg p-1.5 text-faint hover:bg-raised hover:text-slate-600"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -132,11 +132,11 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
         {/* Nearby Teleport devices on this network (LAN discovery) */}
         {state.agentReachable && (
           <div className="mt-4" data-testid="nearby-devices">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">
               Nearby devices
             </p>
             {nearby.length === 0 ? (
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-xs text-muted">
                 Looking for Teleport on this network... Start Teleport on the other laptop (same wifi or cable),
                 or type its address below.
               </p>
@@ -147,13 +147,13 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                     key={d.deviceId}
                     className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
                       address === d.addr
-                        ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-600 dark:bg-indigo-950/40'
-                        : 'border-slate-200 dark:border-slate-700'
+                        ? 'border-ink/40 bg-raised'
+                        : 'border-line'
                     }`}
                   >
                     <span>
-                      <span className="font-semibold text-slate-900 dark:text-white">{d.name}</span>
-                      <span className="ml-2 font-mono text-xs text-slate-500">{d.addr}</span>
+                      <span className="font-semibold text-ink">{d.name}</span>
+                      <span className="ml-2 font-mono text-xs text-muted">{d.addr}</span>
                     </span>
                     {d.paired ? (
                       <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Paired</span>
@@ -161,7 +161,7 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                       <button
                         type="button"
                         onClick={() => setAddress(d.addr)}
-                        className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
+                        className="tp-btn-primary"
                       >
                         Select
                       </button>
@@ -176,7 +176,7 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
         {/* Pairing Form */}
         <form onSubmit={handlePair} className="mt-4 space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
               Target Agent Address (IP:Port or Host)
             </label>
             <input
@@ -184,13 +184,13 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="e.g. 192.168.1.102:8765 or http://127.0.0.1:8766"
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="mt-1 w-full rounded-lg border border-line-strong bg-raised px-3.5 py-2 text-sm text-ink outline-none focus:border-ink/40 focus:ring-1 focus:ring-ink/20"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
                 Remote One-Time PIN
               </label>
               <input
@@ -198,16 +198,16 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 placeholder="PIN shown on the other device"
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3.5 py-2 font-mono text-sm tracking-widest text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-raised px-3.5 py-2 font-mono text-sm tracking-widest text-ink outline-none focus:border-ink/40 focus:ring-1 focus:ring-ink/20"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
                 This Device PIN
               </label>
-              <div className="mt-1 flex h-[38px] items-center justify-between rounded-lg border border-dashed border-indigo-300 bg-indigo-50/60 px-3 font-mono text-sm font-bold tracking-widest text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
+              <div className="mt-1 flex h-[38px] items-center justify-between rounded-lg border border-dashed border-line-strong bg-raised px-3 font-mono text-sm font-medium tracking-[0.25em] text-ink">
                 <span data-testid="local-pin">{localPin || '------'}</span>
-                <span className="text-[10px] uppercase text-indigo-500 font-sans">Tell the other device</span>
+                <span className="font-sans text-[10.5px] tracking-normal text-faint">tell the other laptop</span>
               </div>
             </div>
           </div>
@@ -228,14 +228,14 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="tp-btn"
             >
               Close
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-50"
+              className="tp-btn-primary"
             >
               {isSubmitting ? 'Pairing...' : 'Pair & Connect'}
             </button>
@@ -243,8 +243,8 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
         </form>
 
         {/* List of Already Paired Devices */}
-        <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-800">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div className="mt-6 border-t border-line pt-4">
+          <h3 className="tp-label">
             Paired Devices ({pairedList.length})
           </h3>
 
@@ -258,15 +258,15 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                   key={dev.id}
                   className={`flex items-center justify-between rounded-lg border p-2.5 text-xs ${
                     isSelected
-                      ? 'border-indigo-500/60 bg-indigo-50/50 dark:border-indigo-700/60 dark:bg-indigo-950/30'
+                      ? 'border-ink/30 bg-raised'
                       : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40'
                   }`}
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900 dark:text-white">{dev.name}</span>
+                      <span className="font-semibold text-ink">{dev.name}</span>
                       {isSelf && (
-                        <span className="rounded bg-indigo-100 px-1.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                        <span className="tp-chip py-0 text-[10px]">
                           THIS DEVICE
                         </span>
                       )}
@@ -276,7 +276,7 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                         </span>
                       )}
                     </div>
-                    <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <p className="mt-0.5 text-[11px] text-muted">
                       {formatOs(dev.os)} · {formatArch(dev.arch)} · {dev.cpuCores} cores
                     </p>
                   </div>
@@ -287,7 +287,7 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                       className={`rounded px-2.5 py-1 text-xs font-semibold ${
                         isSelected
                           ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                          : 'bg-ink text-canvas hover:opacity-85'
                       }`}
                     >
                       {isSelected ? 'Active' : 'Select'}

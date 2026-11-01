@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import type { Phase } from '@contract';
+import { useEffect, useRef, useState } from 'react';
 import { useTeleport } from '../store/useTeleport.ts';
 import { apiStartMigration, apiAbortMigration } from '../api.ts';
 import { PhaseStepper } from '../components/migration/PhaseStepper.tsx';
@@ -6,8 +7,27 @@ import { FeasibilityPanel } from '../components/migration/FeasibilityPanel.tsx';
 import { CheckpointGrid } from '../components/migration/CheckpointGrid.tsx';
 import { AuthorityPanel } from '../components/migration/AuthorityPanel.tsx';
 import { TransferStats } from '../components/migration/TransferStats.tsx';
-import { ResourceComparison } from '../components/migration/ResourceComparison.tsx';
 import { RecommendationBanner } from '../components/migration/RecommendationBanner.tsx';
+import { Bridge } from '../components/dashboard/Bridge.tsx';
+import { Icon, PageHeader } from '../components/ui/Icon.tsx';
+
+const TERMINAL: Phase[] = ['COMPLETED', 'ROLLED_BACK', 'FAILED', 'REMOTE_ACCESS', 'IDLE'];
+
+/** When each phase of the current migration started, and the last phase that ran before it ended. */
+function usePhaseTimeline(id: string | undefined, phase: Phase | undefined) {
+  const ref = useRef<{ id?: string; times: Partial<Record<Phase, number>>; last: Phase | null }>({ times: {}, last: null });
+  if (ref.current.id !== id) ref.current = { id, times: {}, last: null };
+  if (phase && ref.current.times[phase] == null) ref.current.times[phase] = Date.now();
+  if (phase && !TERMINAL.includes(phase) && phase !== 'ROLLING_BACK') ref.current.last = phase;
+  const [now, setNow] = useState(Date.now());
+  const active = Boolean(phase && !TERMINAL.includes(phase));
+  useEffect(() => {
+    if (!active) return;
+    const t = window.setInterval(() => setNow(Date.now()), 200);
+    return () => window.clearInterval(t);
+  }, [active]);
+  return { times: ref.current.times, failedAt: ref.current.last, now };
+}
 
 export function MigrationPage() {
   const { state, setSimulationScenario } = useTeleport();
@@ -18,6 +38,7 @@ export function MigrationPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const mig = state.migrationStatus;
+  const timeline = usePhaseTimeline(mig?.id, mig?.phase);
   const isMigrating =
     mig &&
     !['COMPLETED', 'ROLLED_BACK', 'REMOTE_ACCESS'].includes(mig.phase);
@@ -92,95 +113,89 @@ export function MigrationPage() {
     }
   };
 
+  const source = mig ? state.devices[mig.sourceId] : undefined;
+  const target = mig ? state.devices[mig.targetId] : undefined;
+  const workloadName = mig
+    ? (state.workloads.find((w) => w.manifest.id === mig.workloadId)?.manifest.name ?? mig.workloadId)
+    : null;
+  const phaseTone =
+    mig?.phase === 'COMPLETED'
+      ? 'border-ok/40 text-ok'
+      : mig?.phase === 'ROLLED_BACK' || mig?.phase === 'FAILED'
+        ? 'border-bad/40 text-bad'
+        : mig?.phase === 'REMOTE_ACCESS'
+          ? 'border-steel/40 text-steel'
+          : isMigrating
+            ? 'border-accent/40 text-accent'
+            : '';
+
   return (
     <div className="space-y-6">
-      {/* Top Header & Page Controls */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-              Migration Engine & Authority Cutover
-            </h1>
-            <span
-              data-testid="migration-phase-badge"
-              className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${
-                mig?.phase === 'COMPLETED'
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
-                  : mig?.phase === 'ROLLED_BACK'
-                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
-                  : mig?.phase === 'REMOTE_ACCESS'
-                  ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400'
-                  : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'
-              }`}
-            >
+      <PageHeader
+        eyebrow="Migration"
+        title={workloadName ?? 'Move a workload'}
+        description={
+          mig ? (
+            <>
+              {source?.name ?? mig.sourceId}{' '}
+              <Icon name="arrow" className="inline h-3.5 w-3.5 align-[-2px]" /> {target?.name ?? mig.targetId}
+              <span className="text-faint"> · trigger {mig.trigger}</span>
+            </>
+          ) : (
+            'Checkpoints travel while the workload keeps running; it pauses only for the last small delta.'
+          )
+        }
+        actions={
+          <>
+            <span data-testid="migration-phase-badge" className={`tp-chip font-mono ${phaseTone}`}>
               {mig?.phase || 'IDLE'}
             </span>
-          </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Atomic state transfer pipeline, SHA-256 chunk validation, and zero double-spend epoch fencing
-          </p>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            data-testid="btn-start-migration"
-            disabled={actionLoading || Boolean(isMigrating)}
-            onClick={handleOpenStart}
-            className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-            <span>Start Migration</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="btn-abort-migration"
-            disabled={actionLoading || !isMigrating}
-            onClick={handleAbort}
-            className="flex items-center gap-1.5 rounded-xl border border-rose-300 bg-white px-3.5 py-2 text-xs font-bold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:opacity-40 dark:border-rose-900/60 dark:bg-slate-900 dark:text-rose-400 dark:hover:bg-rose-950/30"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            <span>Abort</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="btn-rollback-migration"
-            disabled={actionLoading || !mig || mig.phase === 'COMPLETED' || mig.phase === 'ROLLED_BACK'}
-            onClick={handleRollback}
-            className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 disabled:opacity-40 dark:border-amber-900/60 dark:bg-slate-900 dark:text-amber-400 dark:hover:bg-amber-950/30"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-            </svg>
-            <span>Roll Back</span>
-          </button>
-        </div>
-      </div>
+            <button
+              type="button"
+              data-testid="btn-abort-migration"
+              disabled={actionLoading || !isMigrating}
+              onClick={handleAbort}
+              className="tp-btn"
+            >
+              Abort
+            </button>
+            <button
+              type="button"
+              data-testid="btn-rollback-migration"
+              disabled={actionLoading || !mig || mig.phase === 'COMPLETED' || mig.phase === 'ROLLED_BACK'}
+              onClick={handleRollback}
+              className="tp-btn"
+            >
+              Roll back
+            </button>
+            <button
+              type="button"
+              data-testid="btn-start-migration"
+              disabled={actionLoading || Boolean(isMigrating)}
+              onClick={handleOpenStart}
+              className="tp-btn-primary"
+            >
+              Start migration
+              <Icon name="arrow" className="h-3.5 w-3.5" />
+            </button>
+          </>
+        }
+      />
 
       {actionError && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
-          {actionError}
-        </div>
+        <div className="rounded-xl border border-bad/30 bg-bad-soft p-3 text-sm text-bad">{actionError}</div>
       )}
 
-      {/* Why the last migration failed or rolled back: the agent's own short message plus details */}
       {mig && mig.error && ['ROLLED_BACK', 'FAILED', 'ROLLING_BACK'].includes(mig.phase) && (
-        <div
-          data-testid="migration-error"
-          className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200"
-        >
-          <p className="font-bold">
-            {mig.phase === 'FAILED' ? 'Not migrated' : 'Rolled back: the workload kept running on the source'}
-          </p>
-          <p className="mt-1">{mig.error}</p>
-          <p className="mt-1 text-xs opacity-80">Details are in the reasons below.</p>
+        <div data-testid="migration-error" className="flex gap-3 rounded-2xl border border-bad/30 bg-bad-soft p-4">
+          <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-bad" />
+          <div>
+            <p className="text-sm font-medium text-ink">
+              {mig.phase === 'FAILED' ? 'Not migrated' : 'Rolled back: the workload kept running on the source'}
+            </p>
+            <p className="mt-1 text-sm text-ink/80">{mig.error}</p>
+            <p className="mt-1 text-xs text-muted">Details are in the reasons below.</p>
+          </div>
         </div>
       )}
 
@@ -188,14 +203,14 @@ export function MigrationPage() {
       {state.mockFeederActive && (
         <div
           data-testid="scenario-picker-bar"
-          className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-900/40"
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-warn/50 p-2.5 text-xs"
         >
-          <span className="text-[11px] font-bold uppercase text-slate-500">Live Demo Scenarios:</span>
+          <span className="tp-label px-1">Demo scenarios</span>
           <button
             type="button"
             data-testid="scenario-inflight"
             onClick={() => setSimulationScenario('in_flight')}
-            className="rounded-lg bg-white px-2.5 py-1 font-semibold text-blue-600 shadow-sm border border-slate-200 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-400"
+            className="tp-btn"
           >
             5 of 10 In-Flight (Authority on A)
           </button>
@@ -203,7 +218,7 @@ export function MigrationPage() {
             type="button"
             data-testid="scenario-completed"
             onClick={() => setSimulationScenario('completed')}
-            className="rounded-lg bg-white px-2.5 py-1 font-semibold text-emerald-600 shadow-sm border border-slate-200 hover:bg-emerald-50 dark:border-slate-700 dark:bg-slate-800 dark:text-emerald-400"
+            className="tp-btn"
           >
             Completed Cutover (42ms Interruption)
           </button>
@@ -211,7 +226,7 @@ export function MigrationPage() {
             type="button"
             data-testid="scenario-rollback"
             onClick={() => setSimulationScenario('rollback')}
-            className="rounded-lg bg-white px-2.5 py-1 font-semibold text-rose-600 shadow-sm border border-slate-200 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800 dark:text-rose-400"
+            className="tp-btn"
           >
             Rollback (SHA mismatch checkpoint 4)
           </button>
@@ -219,99 +234,96 @@ export function MigrationPage() {
             type="button"
             data-testid="scenario-remote"
             onClick={() => setSimulationScenario('remote_access')}
-            className="rounded-lg bg-white px-2.5 py-1 font-semibold text-sky-600 shadow-sm border border-slate-200 hover:bg-sky-50 dark:border-slate-700 dark:bg-slate-800 dark:text-sky-400"
+            className="tp-btn"
           >
             Remote Access Branch (Pinned GPU)
           </button>
         </div>
       )}
 
-      {/* Split-Brain Guard Alert Banner (if authority conflict detected) */}
+
       {state.authorityConflict && (
         <div
           data-testid="migration-authority-conflict"
-          className="rounded-xl border border-rose-300 bg-rose-50/95 p-4 shadow-sm dark:border-rose-800 dark:bg-rose-950/50"
+          className="flex gap-3 rounded-2xl border border-bad/30 bg-bad-soft p-4 text-sm"
         >
-          <div className="flex items-start gap-3">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-600 text-white shadow-xs">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div className="flex-1 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                  Authority Conflict Fenced (Split-Brain Guard)
-                </span>
-                <span className="font-mono text-rose-950 dark:text-rose-200">
-                  Workload: {state.authorityConflict.workloadId}
-                </span>
-              </div>
-              <p className="mt-1 text-rose-900/90 dark:text-rose-200/90">
-                Peer epoch {state.authorityConflict.remoteEpoch} vs Local epoch {state.authorityConflict.localEpoch}.
-                Winner: <span className="font-bold">{state.authorityConflict.winner}</span> | Stopped: <span className="font-bold">{state.authorityConflict.stopped}</span>.
-                Reason: {state.authorityConflict.reason}
-              </p>
-            </div>
-          </div>
+          <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-bad" />
+          <p className="text-ink">
+            Two copies of {state.authorityConflict.workloadId} were running. Kept {state.authorityConflict.winner},
+            stopped {state.authorityConflict.stopped} (epoch {state.authorityConflict.remoteEpoch} vs{' '}
+            {state.authorityConflict.localEpoch}). <span className="text-muted">{state.authorityConflict.reason}</span>
+          </p>
         </div>
       )}
 
-      {/* (h) Orchestrator Proactive Recommendation Banner */}
       <RecommendationBanner />
 
-      {/* (a) Phase Stepper */}
-      <PhaseStepper phase={mig?.phase || 'CONNECTING'} />
-
-      {/* Grid: (b) Feasibility Decision & Reasons + (e) Transfer Progress & Interruption Time */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <FeasibilityPanel
-          decision={mig?.decision || (mig?.phase === 'REMOTE_ACCESS' ? 'REMOTE_ACCESS' : 'MIGRATE')}
-          reasons={mig?.reasons || []}
-        />
-        <TransferStats
-          bytesDone={mig?.bytesDone || 0}
-          bytesTotal={mig?.bytesTotal || 0}
-          linkType={mig?.link || state.link?.link || 'wifi'}
-          interruptionMs={mig?.interruptionMs}
-          speedMbps={state.link?.mbps || 120}
-          metrics={mig?.metrics}
-        />
-      </div>
-
-      {/* (d) Authority Cutover Panel */}
-      <AuthorityPanel
-        authority={mig?.authority}
-        deviceA={state.devices[state.thisDeviceId]}
-        deviceB={state.peerDeviceId ? state.devices[state.peerDeviceId] : undefined}
+      <Bridge
+        self={state.devices[state.thisDeviceId]}
+        peer={state.peerDeviceId ? state.devices[state.peerDeviceId] : undefined}
+        selfStats={state.stats[state.thisDeviceId]}
+        peerStats={state.peerDeviceId ? state.stats[state.peerDeviceId] : undefined}
+        link={state.link}
+        migration={mig}
       />
 
-      {/* (c) Checkpoint Grid */}
-      <CheckpointGrid checkpoints={mig?.checkpoints || []} authority={mig?.authority} />
+      <PhaseStepper
+        phase={mig?.phase || 'CONNECTING'}
+        failedAt={timeline.failedAt}
+        startedAt={timeline.times}
+        now={timeline.now}
+      />
 
-      {/* (f) Node Telemetry Resource Comparison */}
-      <ResourceComparison />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
+        <CheckpointGrid
+          checkpoints={mig?.checkpoints || []}
+          authority={mig?.authority}
+          phase={mig?.phase}
+          metrics={mig?.metrics?.checkpoints}
+        />
+        <div className="space-y-5">
+          <TransferStats
+            bytesDone={mig?.bytesDone || 0}
+            bytesTotal={mig?.bytesTotal || 0}
+            linkType={mig?.link || state.link?.link || 'wifi'}
+            interruptionMs={mig?.interruptionMs}
+            speedMbps={state.link?.mbps || 120}
+            metrics={mig?.metrics}
+            migrationId={mig?.id}
+          />
+          <AuthorityPanel
+            authority={mig?.authority}
+            deviceA={state.devices[mig?.sourceId ?? state.thisDeviceId]}
+            deviceB={state.devices[mig?.targetId ?? state.peerDeviceId ?? '']}
+          />
+        </div>
+      </div>
+
+      <FeasibilityPanel
+        decision={mig?.decision || (mig?.phase === 'REMOTE_ACCESS' ? 'REMOTE_ACCESS' : 'MIGRATE')}
+        reasons={mig?.reasons || []}
+      />
 
       {/* Start Migration Modal */}
       {showStartModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-ink">
               Initiate Workload Migration
             </h3>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-xs text-muted">
               Select workload and designated peer node to begin zero-downtime checkpoint synchronization.
             </p>
 
             <div className="mt-5 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="block text-xs font-bold text-ink/85">
                   Target Workload
                 </label>
                 <select
                   value={workloadId}
                   onChange={(e) => setWorkloadId(e.target.value)}
-                  className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="mt-1.5 block w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-xs font-semibold text-ink shadow-sm focus:border-ink/40 focus:outline-none"
                 >
                   {state.workloads.length > 0 ? (
                     state.workloads.map((w) => (
@@ -326,13 +338,13 @@ export function MigrationPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="block text-xs font-bold text-ink/85">
                   Target Peer Device
                 </label>
                 <select
                   value={targetId}
                   onChange={(e) => setTargetId(e.target.value)}
-                  className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="mt-1.5 block w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-xs font-semibold text-ink shadow-sm focus:border-ink/40 focus:outline-none"
                 >
                   {candidateTargets.length > 0 ? (
                     candidateTargets.map((d) => (
@@ -351,7 +363,7 @@ export function MigrationPage() {
               <button
                 type="button"
                 onClick={() => setShowStartModal(false)}
-                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-muted hover:bg-raised"
               >
                 Cancel
               </button>
@@ -360,7 +372,7 @@ export function MigrationPage() {
                 data-testid="modal-confirm-start"
                 onClick={handleStartMigration}
                 disabled={actionLoading}
-                className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+                className="tp-btn-primary"
               >
                 {actionLoading ? 'Connecting...' : 'Start Transfer Pipeline'}
               </button>

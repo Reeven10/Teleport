@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 from contract.contract import CheckpointRecord, MigrationStatus, WorkloadManifest
 
+from .store import replace_file
+
 log = logging.getLogger("teleport.migration.journal")
 
 
@@ -36,7 +38,7 @@ class MigrationJournal:
         path = self.dir / f"{entry.status.id}.json"
         tmp = path.with_suffix(".tmp")
         tmp.write_text(entry.model_dump_json(), "utf-8")
-        tmp.replace(path)
+        replace_file(tmp, path)
 
     def load_all(self) -> list[JournalEntry]:
         if not self.dir.is_dir():

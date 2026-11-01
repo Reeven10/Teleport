@@ -1,9 +1,402 @@
 @import "tailwindcss" source(".");
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource/instrument-serif";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Teleport design tokens.
+ * Warm paper and graphite neutrals, one vermilion accent used sparingly, quiet status colours.
+ * The stock Tailwind ramps are remapped onto this palette, so every component speaks one language:
+ *   slate/gray/zinc/neutral/stone -> warm neutral     indigo/blue/violet/purple -> accent
+ *   sky/cyan/teal -> steel (secondary data)           emerald/green/lime -> sage (ok)
+ *   amber/yellow/orange -> ochre (warning)            rose/red/pink -> brick (error)
+ */
+@theme {
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", monospace;
+
+  --font-weight-extrabold: 620;
+  --font-weight-black: 650;
+  --font-weight-bold: 600;
+
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.875rem;
+
+  --shadow-2xs: 0 1px 0 rgb(28 25 20 / 0.03);
+  --shadow-xs: 0 1px 1px rgb(28 25 20 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(28 25 20 / 0.05);
+  --shadow-md: 0 2px 6px -1px rgb(28 25 20 / 0.07);
+  --shadow-lg: 0 8px 24px -8px rgb(28 25 20 / 0.12);
+  --shadow-xl: 0 16px 40px -12px rgb(28 25 20 / 0.16);
+  --shadow-2xl: 0 24px 64px -16px rgb(28 25 20 / 0.22);
+
+  --animate-ping: soft-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-pulse: soft-pulse 2.4s ease-in-out infinite;
+  --animate-bounce: none;
+
+  /* Semantic colours (switch with the theme) */
+  --color-canvas: var(--tp-canvas);
+  --color-surface: var(--tp-surface);
+  --color-raised: var(--tp-raised);
+  --color-line: var(--tp-line);
+  --color-line-strong: var(--tp-line-strong);
+  --color-ink: var(--tp-ink);
+  --color-muted: var(--tp-muted);
+  --color-faint: var(--tp-faint);
+  --color-accent: var(--tp-accent);
+  --color-accent-ink: var(--tp-accent-ink);
+  --color-accent-soft: var(--tp-accent-soft);
+  --color-ok: var(--tp-ok);
+  --color-ok-soft: var(--tp-ok-soft);
+  --color-warn: var(--tp-warn);
+  --color-warn-soft: var(--tp-warn-soft);
+  --color-bad: var(--tp-bad);
+  --color-bad-soft: var(--tp-bad-soft);
+  --color-steel: var(--tp-steel);
+
+  /* Warm neutral */
+  --color-slate-50: oklch(0.982 0.004 85);
+  --color-slate-100: oklch(0.962 0.006 85);
+  --color-slate-200: oklch(0.918 0.008 82);
+  --color-slate-300: oklch(0.858 0.01 80);
+  --color-slate-400: oklch(0.7 0.012 76);
+  --color-slate-500: oklch(0.56 0.012 72);
+  --color-slate-600: oklch(0.46 0.01 70);
+  --color-slate-700: oklch(0.37 0.008 70);
+  --color-slate-800: oklch(0.255 0.006 70);
+  --color-slate-900: oklch(0.205 0.005 70);
+  --color-slate-950: oklch(0.165 0.004 70);
+  --color-gray-50: var(--color-slate-50);
+  --color-gray-100: var(--color-slate-100);
+  --color-gray-200: var(--color-slate-200);
+  --color-gray-300: var(--color-slate-300);
+  --color-gray-400: var(--color-slate-400);
+  --color-gray-500: var(--color-slate-500);
+  --color-gray-600: var(--color-slate-600);
+  --color-gray-700: var(--color-slate-700);
+  --color-gray-800: var(--color-slate-800);
+  --color-gray-900: var(--color-slate-900);
+  --color-gray-950: var(--color-slate-950);
+  --color-zinc-50: var(--color-slate-50);
+  --color-zinc-100: var(--color-slate-100);
+  --color-zinc-200: var(--color-slate-200);
+  --color-zinc-300: var(--color-slate-300);
+  --color-zinc-400: var(--color-slate-400);
+  --color-zinc-500: var(--color-slate-500);
+  --color-zinc-600: var(--color-slate-600);
+  --color-zinc-700: var(--color-slate-700);
+  --color-zinc-800: var(--color-slate-800);
+  --color-zinc-900: var(--color-slate-900);
+  --color-zinc-950: var(--color-slate-950);
+
+  /* Accent: vermilion */
+  --color-indigo-50: oklch(0.972 0.014 50);
+  --color-indigo-100: oklch(0.945 0.03 48);
+  --color-indigo-200: oklch(0.89 0.06 45);
+  --color-indigo-300: oklch(0.81 0.1 42);
+  --color-indigo-400: oklch(0.72 0.14 40);
+  --color-indigo-500: oklch(0.655 0.165 38);
+  --color-indigo-600: oklch(0.6 0.165 37);
+  --color-indigo-700: oklch(0.52 0.145 36);
+  --color-indigo-800: oklch(0.43 0.115 35);
+  --color-indigo-900: oklch(0.34 0.08 35);
+  --color-indigo-950: oklch(0.25 0.05 35);
+  --color-blue-50: var(--color-indigo-50);
+  --color-blue-100: var(--color-indigo-100);
+  --color-blue-200: var(--color-indigo-200);
+  --color-blue-300: var(--color-indigo-300);
+  --color-blue-400: var(--color-indigo-400);
+  --color-blue-500: var(--color-indigo-500);
+  --color-blue-600: var(--color-indigo-600);
+  --color-blue-700: var(--color-indigo-700);
+  --color-blue-800: var(--color-indigo-800);
+  --color-blue-900: var(--color-indigo-900);
+  --color-blue-950: var(--color-indigo-950);
+  --color-violet-50: var(--color-indigo-50);
+  --color-violet-100: var(--color-indigo-100);
+  --color-violet-200: var(--color-indigo-200);
+  --color-violet-300: var(--color-indigo-300);
+  --color-violet-400: var(--color-indigo-400);
+  --color-violet-500: var(--color-indigo-500);
+  --color-violet-600: var(--color-indigo-600);
+  --color-violet-700: var(--color-indigo-700);
+  --color-violet-800: var(--color-indigo-800);
+  --color-violet-900: var(--color-indigo-900);
+  --color-violet-950: var(--color-indigo-950);
+  --color-purple-50: var(--color-indigo-50);
+  --color-purple-100: var(--color-indigo-100);
+  --color-purple-200: var(--color-indigo-200);
+  --color-purple-300: var(--color-indigo-300);
+  --color-purple-400: var(--color-indigo-400);
+  --color-purple-500: var(--color-indigo-500);
+  --color-purple-600: var(--color-indigo-600);
+  --color-purple-700: var(--color-indigo-700);
+  --color-purple-800: var(--color-indigo-800);
+  --color-purple-900: var(--color-indigo-900);
+  --color-purple-950: var(--color-indigo-950);
+
+  /* Steel: secondary data colour */
+  --color-sky-50: oklch(0.975 0.006 240);
+  --color-sky-100: oklch(0.948 0.012 240);
+  --color-sky-200: oklch(0.9 0.022 240);
+  --color-sky-300: oklch(0.82 0.035 240);
+  --color-sky-400: oklch(0.71 0.05 240);
+  --color-sky-500: oklch(0.6 0.06 242);
+  --color-sky-600: oklch(0.52 0.06 244);
+  --color-sky-700: oklch(0.44 0.055 246);
+  --color-sky-800: oklch(0.36 0.045 246);
+  --color-sky-900: oklch(0.29 0.035 246);
+  --color-sky-950: oklch(0.22 0.025 246);
+  --color-cyan-50: var(--color-sky-50);
+  --color-cyan-100: var(--color-sky-100);
+  --color-cyan-200: var(--color-sky-200);
+  --color-cyan-300: var(--color-sky-300);
+  --color-cyan-400: var(--color-sky-400);
+  --color-cyan-500: var(--color-sky-500);
+  --color-cyan-600: var(--color-sky-600);
+  --color-cyan-700: var(--color-sky-700);
+  --color-cyan-800: var(--color-sky-800);
+  --color-cyan-900: var(--color-sky-900);
+  --color-cyan-950: var(--color-sky-950);
+  --color-teal-50: var(--color-sky-50);
+  --color-teal-100: var(--color-sky-100);
+  --color-teal-200: var(--color-sky-200);
+  --color-teal-300: var(--color-sky-300);
+  --color-teal-400: var(--color-sky-400);
+  --color-teal-500: var(--color-sky-500);
+  --color-teal-600: var(--color-sky-600);
+  --color-teal-700: var(--color-sky-700);
+  --color-teal-800: var(--color-sky-800);
+  --color-teal-900: var(--color-sky-900);
+  --color-teal-950: var(--color-sky-950);
+
+  /* Sage: ok */
+  --color-emerald-50: oklch(0.975 0.012 150);
+  --color-emerald-100: oklch(0.948 0.025 150);
+  --color-emerald-200: oklch(0.895 0.045 150);
+  --color-emerald-300: oklch(0.82 0.065 150);
+  --color-emerald-400: oklch(0.72 0.08 150);
+  --color-emerald-500: oklch(0.62 0.085 152);
+  --color-emerald-600: oklch(0.54 0.08 154);
+  --color-emerald-700: oklch(0.46 0.07 156);
+  --color-emerald-800: oklch(0.38 0.055 156);
+  --color-emerald-900: oklch(0.3 0.04 156);
+  --color-emerald-950: oklch(0.23 0.03 156);
+  --color-green-50: var(--color-emerald-50);
+  --color-green-100: var(--color-emerald-100);
+  --color-green-200: var(--color-emerald-200);
+  --color-green-300: var(--color-emerald-300);
+  --color-green-400: var(--color-emerald-400);
+  --color-green-500: var(--color-emerald-500);
+  --color-green-600: var(--color-emerald-600);
+  --color-green-700: var(--color-emerald-700);
+  --color-green-800: var(--color-emerald-800);
+  --color-green-900: var(--color-emerald-900);
+  --color-green-950: var(--color-emerald-950);
+
+  /* Ochre: warning */
+  --color-amber-50: oklch(0.978 0.016 85);
+  --color-amber-100: oklch(0.952 0.035 85);
+  --color-amber-200: oklch(0.9 0.065 82);
+  --color-amber-300: oklch(0.84 0.095 80);
+  --color-amber-400: oklch(0.77 0.115 76);
+  --color-amber-500: oklch(0.7 0.125 72);
+  --color-amber-600: oklch(0.61 0.115 68);
+  --color-amber-700: oklch(0.52 0.1 64);
+  --color-amber-800: oklch(0.43 0.08 62);
+  --color-amber-900: oklch(0.35 0.06 60);
+  --color-amber-950: oklch(0.26 0.04 60);
+  --color-yellow-50: var(--color-amber-50);
+  --color-yellow-100: var(--color-amber-100);
+  --color-yellow-200: var(--color-amber-200);
+  --color-yellow-300: var(--color-amber-300);
+  --color-yellow-400: var(--color-amber-400);
+  --color-yellow-500: var(--color-amber-500);
+  --color-yellow-600: var(--color-amber-600);
+  --color-yellow-700: var(--color-amber-700);
+  --color-yellow-800: var(--color-amber-800);
+  --color-yellow-900: var(--color-amber-900);
+  --color-yellow-950: var(--color-amber-950);
+  --color-orange-50: var(--color-amber-50);
+  --color-orange-100: var(--color-amber-100);
+  --color-orange-200: var(--color-amber-200);
+  --color-orange-300: var(--color-amber-300);
+  --color-orange-400: var(--color-amber-400);
+  --color-orange-500: var(--color-amber-500);
+  --color-orange-600: var(--color-amber-600);
+  --color-orange-700: var(--color-amber-700);
+  --color-orange-800: var(--color-amber-800);
+  --color-orange-900: var(--color-amber-900);
+  --color-orange-950: var(--color-amber-950);
+
+  /* Brick: error */
+  --color-rose-50: oklch(0.975 0.012 18);
+  --color-rose-100: oklch(0.945 0.028 18);
+  --color-rose-200: oklch(0.89 0.055 18);
+  --color-rose-300: oklch(0.8 0.09 18);
+  --color-rose-400: oklch(0.7 0.125 18);
+  --color-rose-500: oklch(0.6 0.145 18);
+  --color-rose-600: oklch(0.53 0.14 18);
+  --color-rose-700: oklch(0.46 0.125 18);
+  --color-rose-800: oklch(0.38 0.1 18);
+  --color-rose-900: oklch(0.31 0.075 18);
+  --color-rose-950: oklch(0.23 0.05 18);
+  --color-red-50: var(--color-rose-50);
+  --color-red-100: var(--color-rose-100);
+  --color-red-200: var(--color-rose-200);
+  --color-red-300: var(--color-rose-300);
+  --color-red-400: var(--color-rose-400);
+  --color-red-500: var(--color-rose-500);
+  --color-red-600: var(--color-rose-600);
+  --color-red-700: var(--color-rose-700);
+  --color-red-800: var(--color-rose-800);
+  --color-red-900: var(--color-rose-900);
+  --color-red-950: var(--color-rose-950);
+}
+
+:root {
+  --tp-canvas: oklch(0.968 0.007 85);
+  --tp-surface: oklch(0.993 0.003 85);
+  --tp-raised: oklch(0.978 0.005 85);
+  --tp-line: oklch(0.905 0.009 82);
+  --tp-line-strong: oklch(0.84 0.011 80);
+  --tp-ink: oklch(0.22 0.008 70);
+  --tp-muted: oklch(0.5 0.012 72);
+  --tp-faint: oklch(0.66 0.012 75);
+  --tp-accent: oklch(0.6 0.165 37);
+  --tp-accent-ink: oklch(0.99 0.005 60);
+  --tp-accent-soft: oklch(0.95 0.028 48);
+  --tp-ok: oklch(0.54 0.08 154);
+  --tp-ok-soft: oklch(0.95 0.022 150);
+  --tp-warn: oklch(0.6 0.115 68);
+  --tp-warn-soft: oklch(0.955 0.03 85);
+  --tp-bad: oklch(0.53 0.14 18);
+  --tp-bad-soft: oklch(0.95 0.024 18);
+  --tp-steel: oklch(0.55 0.06 244);
+  color-scheme: light;
+}
+
+.dark {
+  --tp-canvas: oklch(0.165 0.004 70);
+  --tp-surface: oklch(0.198 0.005 70);
+  --tp-raised: oklch(0.228 0.006 70);
+  --tp-line: oklch(0.285 0.006 70);
+  --tp-line-strong: oklch(0.36 0.008 70);
+  --tp-ink: oklch(0.94 0.006 85);
+  --tp-muted: oklch(0.7 0.01 78);
+  --tp-faint: oklch(0.54 0.01 74);
+  --tp-accent: oklch(0.7 0.15 40);
+  --tp-accent-ink: oklch(0.18 0.02 40);
+  --tp-accent-soft: oklch(0.27 0.045 38);
+  --tp-ok: oklch(0.74 0.08 152);
+  --tp-ok-soft: oklch(0.26 0.03 152);
+  --tp-warn: oklch(0.79 0.11 78);
+  --tp-warn-soft: oklch(0.27 0.035 70);
+  --tp-bad: oklch(0.72 0.12 20);
+  --tp-bad-soft: oklch(0.26 0.045 18);
+  --tp-steel: oklch(0.72 0.05 240);
+  color-scheme: dark;
+}
+
 @layer base {
+  html,
   body {
-    @apply antialiased;
+    background: var(--tp-canvas);
+    color: var(--tp-ink);
+  }
+  body {
+    @apply font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: var(--tp-accent-soft);
+  }
+  .font-mono,
+  code {
+    font-feature-settings: "zero" 0, "calt" 0;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Small caps labels instead of shouting */
+  .uppercase {
+    letter-spacing: 0.06em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--tp-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .tp-card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .tp-label {
+    @apply text-[11px] font-medium tracking-wide text-muted;
+  }
+  .tp-title {
+    @apply font-serif text-[2.1rem] leading-[1.05] font-normal tracking-[-0.01em] text-ink;
+  }
+  .tp-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .tp-btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-canvas transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .tp-btn-accent {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .tp-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-medium text-muted;
+  }
+  .tp-dot {
+    @apply inline-block h-1.5 w-1.5 rounded-full;
+  }
+}
+
+@keyframes soft-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@keyframes soft-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Packets travelling along the link while a migration transfers */
+@keyframes tp-travel {
+  from {
+    offset-distance: 0%;
+  }
+  to {
+    offset-distance: 100%;
+  }
+}
+
+@keyframes tp-dash {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

@@ -72,12 +72,12 @@ export function RemoteConsentPrompt() {
       {pending && (
         <div
           data-testid="consent-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4"
         >
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Remote Control Permission Request</h3>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              <span className="font-bold text-slate-900 dark:text-white">{nameOf(pending.viewerId)}</span> wants to
+          <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-ink">Remote Control Permission Request</h3>
+            <p className="mt-2 text-sm text-muted">
+              <span className="font-bold text-ink">{nameOf(pending.viewerId)}</span> wants to
               see this screen and use its mouse and keyboard, to work with{' '}
               <span className="font-mono font-bold">{pending.workloadId}</span>.
             </p>
@@ -89,7 +89,7 @@ export function RemoteConsentPrompt() {
                 type="button"
                 data-testid="btn-consent-deny"
                 onClick={() => answer(pending, false)}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="tp-btn"
               >
                 Deny
               </button>
@@ -97,7 +97,7 @@ export function RemoteConsentPrompt() {
                 type="button"
                 data-testid="btn-consent-allow"
                 onClick={() => answer(pending, true)}
-                className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow hover:bg-blue-700"
+                className="tp-btn-primary"
               >
                 Allow
               </button>
