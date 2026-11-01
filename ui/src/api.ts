@@ -1,7 +1,9 @@
 import type {
+  Authority,
   BusEvent,
   DecisionLog,
   DeviceInfo,
+  FeasibilityResult,
   MigrationStatus,
   RemoteSession,
   Stats,
@@ -364,4 +366,47 @@ export async function apiStopRemoteView(hostId: string, sessionId: string): Prom
 export function remoteViewUrl(hostId: string, sessionId: string): string {
   const base = agentBase || window.location.origin;
   return `${base.replace(/^http/, 'ws')}/ws/remote-view/${encodeURIComponent(hostId)}/${encodeURIComponent(sessionId)}`;
+}
+
+// ---- Round 2: server projects, folder picker, compatibility, per-workload leases, start fresh
+
+export interface ServerDetection {
+  kind: 'node' | 'python';
+  name: string;
+  path: string;
+  runtime: { name: string; minVersion: string };
+  install: string | null;
+  dependencies: string[];
+  command: string;
+  port: number;
+}
+
+export async function apiDetectServer(projectPath: string): Promise<ServerDetection> {
+  return postJson<ServerDetection>('/api/apps/server/detect', { projectPath });
+}
+
+export async function apiStartServer(
+  projectPath: string,
+  command?: string,
+  port?: number,
+): Promise<WorkloadManifest> {
+  return postJson<WorkloadManifest>('/api/apps/server', { projectPath, command, port });
+}
+
+/** Opens the system folder dialog on this laptop; null if cancelled. */
+export async function apiPickFolder(title?: string): Promise<string | null> {
+  const res = await postJson<{ path: string | null }>('/api/pick-folder', { title });
+  return res.path;
+}
+
+export async function apiCheckFeasibility(workloadId: string, targetId: string): Promise<FeasibilityResult> {
+  return postJson<FeasibilityResult>('/api/feasibility', { workloadId, targetId });
+}
+
+export async function apiFetchAuthority(): Promise<Authority[]> {
+  return getJson<Authority[]>('/api/authority');
+}
+
+export async function apiResetDevices(): Promise<{ devices: number; migrations: number; leases: number }> {
+  return postJson<{ devices: number; migrations: number; leases: number }>('/api/reset/devices', {});
 }

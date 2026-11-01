@@ -1,0 +1,18 @@
+# Remote access demo: a notes app that is pinned to the laptop it runs on.
+# "local-license-dongle" stands in for something only this laptop has (a licence dongle, a local
+# database, special hardware). No other device reports it, so Teleport cannot migrate the app and
+# chooses remote access instead: the app keeps running here and the other laptop views and controls it.
+id: pinned-notes
+name: Field notes (pinned)
+command: python notes.py
+runtime: { name: python, minVersion: "3.11" }
+arch: [x86_64, arm64]
+os: [linux, windows, macos]
+minRamMb: 64
+minCpuCores: 1
+minDiskMb: 10
+needsGpu: false
+libs: [local-license-dongle]
+remoteCapable: true
+checkpoints:
+  - { id: notes, name: Notes text, paths: [] }

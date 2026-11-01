@@ -164,6 +164,23 @@ class SqliteHistoryStore:
 
         await asyncio.to_thread(_insert)
 
+    async def clear_all(self) -> dict[str, int]:
+        """Start fresh: delete every recorded device, migration, decision and event. The store keeps
+        recording from now on; only the old rows go."""
+
+        def _clear() -> dict[str, int]:
+            with self._lock:
+                conn = self._get_connection()
+                counts = {}
+                for table in ("devices", "migrations", "decisions", "events"):
+                    counts[table] = conn.execute(f"SELECT COUNT(*) FROM {table};").fetchone()[0]
+                    conn.execute(f"DELETE FROM {table};")
+                conn.commit()
+                self._last_snapshot_ts.clear()
+                return counts
+
+        return await asyncio.to_thread(_clear)
+
     # ------------------------------------------------------------ Persistence Internals
 
     async def _persist_device(self, device: DeviceInfo) -> None:

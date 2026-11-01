@@ -90,6 +90,15 @@ class DeviceServiceImpl(DeviceService):
         """Register or update a known peer device."""
         self.registry.upsert(device, last_seen=time.time())
 
+    def forget_peers(self) -> list[str]:
+        """Remove every device except this one (registry and live stats). Returns the removed ids."""
+        gone = [d.id for d in self.registry.list_devices() if d.id != self.ctx.device_id]
+        for device_id in gone:
+            self.registry.remove(device_id)
+            self._latest_stats.pop(device_id, None)
+            self._stats_received_at.pop(device_id, None)
+        return gone
+
     def record_peer_stats(self, stats: Stats) -> None:
         """Store the latest stats received from a peer device."""
         self._latest_stats[stats.deviceId] = stats

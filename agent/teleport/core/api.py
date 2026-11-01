@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from contract.contract import (
+    Authority,
     DecisionLog,
     DeviceInfo,
     FeasibilityResult,
@@ -25,6 +27,7 @@ from contract.contract import (
 
 from .. import __version__
 from .context import Context
+from .local_tools import is_local_request, pick_folder, reset_devices
 from .settings import CHUNK_KB_MAX, CHUNK_KB_MIN, Mode, PreferredLink, Prefs, RemoteConsent
 
 
@@ -51,6 +54,21 @@ class MigrationRequest(BaseModel):
 class VSCodeAppRequest(BaseModel):
     projectPath: str
     name: str | None = None
+
+
+class ServerDetectRequest(BaseModel):
+    projectPath: str
+
+
+class ServerAppRequest(BaseModel):
+    projectPath: str
+    command: str | None = None
+    port: int | None = None
+    name: str | None = None
+
+
+class PickFolderRequest(BaseModel):
+    title: str | None = None
 
 
 class PrecopyRequest(BaseModel):
@@ -134,11 +152,64 @@ def build_router(ctx: Context, history_routes: bool = True) -> APIRouter:
 
         try:
             folder = await asyncio.to_thread(
-                create_vscode_workload, ctx.settings.home, req.projectPath, req.name
+                create_vscode_workload, ctx.settings.home, req.projectPath, req.name, ctx.device_id
             )
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         return await ctx.workloads.launch(str(folder))
+
+    @r.post("/apps/server/detect")
+    async def detect_server(req: ServerDetectRequest) -> dict[str, Any]:
+        """What Teleport found in a server folder (language, install step, start command, port)."""
+        from ..apps.server import detect_project
+
+        try:
+            return await asyncio.to_thread(detect_project, Path(req.projectPath.strip().strip('"')))
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @r.post("/apps/server")
+    async def start_server(req: ServerAppRequest) -> WorkloadManifest:
+        """Run a Python or Node server project of this device as a migratable workload."""
+        from ..apps import create_server_workload
+
+        if req.port is not None and not 1 <= req.port <= 65535:
+            raise HTTPException(400, "The port must be between 1 and 65535.")
+        try:
+            folder = await asyncio.to_thread(
+                create_server_workload,
+                ctx.settings.home,
+                req.projectPath,
+                ctx.device_id,
+                req.command,
+                req.port,
+                req.name,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return await ctx.workloads.launch(str(folder))
+
+    @r.post("/pick-folder")
+    async def pick_folder_route(req: PickFolderRequest, request: Request) -> dict[str, str | None]:
+        """Open the native folder picker on this device (only for the dashboard on this device)."""
+        if not is_local_request(request):
+            raise HTTPException(403, "The folder picker only opens for the dashboard on this device.")
+        try:
+            return {"path": await pick_folder(req.title or "Choose a project folder")}
+        except RuntimeError as e:
+            raise HTTPException(501, str(e)) from None
+
+    @r.get("/authority")
+    async def authority_leases() -> list[Authority]:
+        """One lease per workload this device knows, each stamped with the migration that set it."""
+        return ctx.authority.leases()
+
+    @r.post("/reset/devices")
+    async def forget_devices(request: Request) -> dict[str, Any]:
+        """Forget every paired device and clear the history: start fresh. History keeps recording."""
+        if not is_local_request(request):
+            raise HTTPException(403, "Only the dashboard on this device can reset it.")
+        return await reset_devices(ctx)
 
     @r.get("/discovery")
     async def discovery() -> list[dict[str, Any]]:

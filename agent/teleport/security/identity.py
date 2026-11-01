@@ -135,6 +135,11 @@ class PeerKeyStore:
         self.save()
         log.info("Recorded trusted Ed25519 key for peer %s", peer_id)
 
+    def forget(self, peer_ids: set[str]) -> None:
+        """Drop trusted keys (the device pairs again from scratch, with a PIN)."""
+        if any(self._keys.pop(pid, None) for pid in list(peer_ids)):
+            self.save()
+
     def get_peer_key(self, peer_id: str) -> bytes | None:
         if key_b64 := self._keys.get(peer_id):
             return base64.b64decode(key_b64)

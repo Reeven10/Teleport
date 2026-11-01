@@ -2,6 +2,7 @@ import { PageHeader } from '../components/ui/Icon.tsx';
 import { useEffect, useState } from 'react';
 import type { DecisionLog, DeviceInfo, MigrationStatus } from '@contract';
 import {
+  apiResetDevices,
   apiGetHistoryDecisions,
   apiGetHistoryDevices,
   apiGetHistoryMigrations,
@@ -18,13 +19,20 @@ import { MigrationTable } from '../components/history/MigrationTable.tsx';
 import { MigrationDetailModal } from '../components/history/MigrationDetailModal.tsx';
 import { DecisionLogPanel } from '../components/history/DecisionLogPanel.tsx';
 import { PairDialog } from '../components/pairing/PairDialog.tsx';
+import { ForgetDevicesDialog } from '../components/history/ForgetDevicesDialog.tsx';
 import { useTeleport } from '../store/useTeleport.ts';
 
 export function HistoryPage() {
   const { state } = useTeleport();
-  const [deviceItems, setDeviceItems] = useState<DeviceHistoryItem[]>(MOCK_HISTORY_DEVICES);
-  const [migrations, setMigrations] = useState<MigrationStatus[]>(MOCK_HISTORY_MIGRATIONS);
-  const [decisions, setDecisions] = useState<DecisionLog[]>(MOCK_HISTORY_DECISIONS);
+  // Sample history only without a live agent (or with ?mock=1): a real agent's history is shown as it
+  // is, even when empty, so forgotten devices never come back as sample ones.
+  const sample =
+    !state.agentReachable ||
+    state.mockFeederActive ||
+    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('mock'));
+  const [deviceItems, setDeviceItems] = useState<DeviceHistoryItem[]>(sample ? MOCK_HISTORY_DEVICES : []);
+  const [migrations, setMigrations] = useState<MigrationStatus[]>(sample ? MOCK_HISTORY_MIGRATIONS : []);
+  const [decisions, setDecisions] = useState<DecisionLog[]>(sample ? MOCK_HISTORY_DECISIONS : []);
 
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [inspectingMigration, setInspectingMigration] = useState<MigrationStatus | null>(null);
@@ -38,6 +46,12 @@ export function HistoryPage() {
     let cancelled = false;
 
     async function loadData() {
+      if (sample) {
+        setDeviceItems(MOCK_HISTORY_DEVICES);
+        setMigrations(MOCK_HISTORY_MIGRATIONS);
+        setDecisions(MOCK_HISTORY_DECISIONS);
+        return;
+      }
       if (state.agentReachable) {
         try {
           const [apiDevs, apiMigs, apiDecs] = await Promise.all([
@@ -48,23 +62,16 @@ export function HistoryPage() {
 
           if (cancelled) return;
 
-          if (apiMigs.length > 0) {
-            setMigrations(apiMigs);
-          }
-
-          if (apiDecs.length > 0) {
-            setDecisions(apiDecs);
-          }
-
-          if (apiDevs.length > 0) {
-            const devItems: DeviceHistoryItem[] = apiDevs.map((s) => ({
+          setMigrations(apiMigs);
+          setDecisions(apiDecs);
+          setDeviceItems(
+            apiDevs.map((s) => ({
               device: s.device,
               firstSeen: s.firstSeen,
               lastSeen: s.lastSeen,
               migrationCount: s.migrationCount,
-            }));
-            setDeviceItems(devItems);
-          }
+            })),
+          );
         } catch {
           // Keep mock history on failure
         }
@@ -76,7 +83,7 @@ export function HistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [state.agentReachable]);
+  }, [state.agentReachable, sample]);
 
   const handleSelectMigration = async (mig: MigrationStatus) => {
     try {
@@ -111,9 +118,10 @@ export function HistoryPage() {
           <span className="rounded-full bg-raised px-3 py-1 font-mono text-[11px] font-semibold text-muted">
             {migrations.length} Migrations Logged
           </span>
-          <span className="rounded-full bg-indigo-50 px-3 py-1 font-mono text-[11px] font-semibold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+          <span className="rounded-full bg-raised px-3 py-1 font-mono text-[11px] font-semibold text-muted">
             {decisions.length} Decisions Logged
           </span>
+          <ForgetDevicesDialog onReset={apiResetDevices} />
         </div>
       </div>
 

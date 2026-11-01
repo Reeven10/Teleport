@@ -24,6 +24,9 @@ from teleport_sdk.unit import collect_files, pack_unit, unpack_unit
 from contract.contract import CheckpointRecord
 
 CHUNK_SIZE = 256 * 1024
+# Installed dependencies never travel: the target reinstalls them from the manifest files
+# (package.json, requirements.txt), which is smaller, faster and right for its OS and CPU.
+DEPENDENCY_DIRS = ("node_modules", ".venv", "venv", "__pycache__", "*.pyc", ".next", ".parcel-cache")
 UNIT = "unit.tar.gz"
 META = "meta.json"
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -130,7 +133,8 @@ class CheckpointStore:
         self, workload_id: str, checkpoint_id: str, workdir: Path, paths: Iterable[str], level: int = 6
     ) -> CheckpointRecord:
         """Agent-side checkpoint of manifest paths (relative to the workload's working folder)."""
-        return self.put(workload_id, checkpoint_id, pack_unit(None, collect_files(paths, workdir), level))
+        files = collect_files(paths, workdir, exclude=DEPENDENCY_DIRS)
+        return self.put(workload_id, checkpoint_id, pack_unit(None, files, level))
 
     def read(self, workload_id: str, checkpoint_id: str) -> bytes | None:
         path = self.unit_path(workload_id, checkpoint_id)

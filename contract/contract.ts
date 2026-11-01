@@ -16,7 +16,7 @@ export interface WorkloadManifest { id: string; name: string; command: string; r
 export interface CheckpointRecord { id: string; seq: number; sizeBytes: number; sha256: string; createdAt: number; sent?: boolean; validated?: boolean }
 export interface Reason { code: string; severity: 'pass' | 'warn' | 'block'; text: string }
 export interface FeasibilityResult { workloadId: string; sourceId: string; targetId: string; decision: Decision; reasons: Reason[]; estTransferSec: number; estInterruptionMs: number; ts: number }
-export interface Authority { workloadId: string; holder: string | null; epoch: number; state: AuthorityState }
+export interface Authority { workloadId: string; holder: string | null; epoch: number; state: AuthorityState; migrationId?: string | null }
 export interface MigrationStatus { id: string; workloadId: string; sourceId: string; targetId: string; phase: Phase; trigger: Trigger; link: LinkType; decision?: Decision; reasons: Reason[]; checkpoints: CheckpointRecord[]; bytesTotal: number; bytesDone: number; authority: Authority; interruptionMs?: number; error?: string; startedAt: number; endedAt?: number; metrics?: MigrationMetrics }
 export interface CheckpointMetric { id: string; stage: 'initial' | 'catchup' | 'delta' | 'precopy'; sizeBytes: number; chunks: number; retries: number; transferMs: number; mbps: number; skipped: boolean }
 export interface MigrationMetrics { migrationId: string; link: LinkType; chunkSize: number; durationMs: number; interruptionMs?: number; bytesTotal: number; bytesDone: number; bytesSkipped: number; throughputMbps: number; checkpoints: CheckpointMetric[]; ts: number; cutover?: CutoverTiming }
