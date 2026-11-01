@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psutil
@@ -102,6 +103,7 @@ class PeerLinkService(PeerLink):
         self._peer_faults: dict[str, FaultInjector] = {}
         self._peer_loss: dict[str, float] = {}
         self._unsub_stats: Any = None
+        self._preferred: dict[str, str] = self._load_preferred()  # device id -> host:port that worked
 
         self.router = APIRouter()
         self._setup_routes()
@@ -341,6 +343,9 @@ class PeerLinkService(PeerLink):
 
         local = self.ctx.devices.local_info()
         remote_device = await self.pairing.initiate_remote_pair(addr, pin, local)
+        # The address we paired over is one that works: dial it first from now on (it beats any
+        # virtual adapter the peer also advertises, e.g. VirtualBox shown as "cable").
+        self._remember_addr(remote_device.id, _host_port(addr))
 
         # Store peer in registry
         _record_peer_device(self.ctx, remote_device)
@@ -351,6 +356,32 @@ class PeerLinkService(PeerLink):
             await self.connect(remote_device.id)
 
         return remote_device
+
+    def _preferred_path(self) -> Path:
+        return self.ctx.settings.home / "peer_addrs.json"
+
+    def _load_preferred(self) -> dict[str, str]:
+        try:
+            data = json.loads(self._preferred_path().read_text("utf-8"))
+            return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _remember_addr(self, device_id: str, host_port: str) -> None:
+        if not host_port or self._preferred.get(device_id) == host_port:
+            return
+        self._preferred[device_id] = host_port
+        with contextlib.suppress(OSError):
+            self._preferred_path().write_text(json.dumps(self._preferred), "utf-8")
+
+    def _with_preferred(self, device_id: str, candidates: list[DeviceAddr]) -> list[DeviceAddr]:
+        """Put the last address that worked for this peer first (keeping its advertised link type)."""
+        pref = self._preferred.get(device_id)
+        if not pref or self._forced_link:
+            return candidates
+        match = next((c for c in candidates if _host_port(c.addr) == pref), None)
+        first = match or DeviceAddr(addr=pref, link=classify_interface(name="peer", ip=pref.split(":")[0]))
+        return [first, *(c for c in candidates if _host_port(c.addr) != pref)]
 
     def _get_sorted_candidate_addrs(self, addrs: list[DeviceAddr]) -> list[DeviceAddr]:
         """Sort peer addresses by preference policy (forced link, or cable > wifi > loopback)."""
@@ -378,7 +409,7 @@ class PeerLinkService(PeerLink):
         if not target:
             raise ValueError(f"Unknown device {device_id}")
 
-        candidates = self._get_sorted_candidate_addrs(target.addrs)
+        candidates = self._with_preferred(device_id, self._get_sorted_candidate_addrs(target.addrs))
         if not candidates:
             raise ConnectionError(f"Device {device_id} has no reachable addresses matching link policy")
 
@@ -457,6 +488,7 @@ class PeerLinkService(PeerLink):
                 )
                 self._connections[device_id] = conn
                 conn.start()
+                self._remember_addr(device_id, host_port)
 
                 # Check if failover occurred
                 prev_link = self._previous_link_types.get(device_id)
@@ -597,3 +629,11 @@ class PeerLinkService(PeerLink):
         for conn in list(self._connections.values()):
             await conn.close()
         self._connections.clear()
+
+
+def _host_port(addr: str) -> str:
+    """'http://1.2.3.4:8765/peer' -> '1.2.3.4:8765'."""
+    hp = addr.strip()
+    for prefix in ("http://", "https://", "ws://", "wss://"):
+        hp = hp.removeprefix(prefix)
+    return hp.rstrip("/").removesuffix("/peer").rstrip("/")

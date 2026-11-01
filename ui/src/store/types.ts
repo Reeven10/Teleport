@@ -68,5 +68,6 @@ export type StoreAction =
   | { type: 'SELECT_PEER'; payload: string }
   | { type: 'ADD_PAIRED_DEVICE'; payload: DeviceInfo }
   | { type: 'ADD_WORKLOAD'; payload: WorkloadItem }
+  | { type: 'SET_WORKLOADS'; payload: { workloads: WorkloadItem[]; runs: WorkloadRun[] } }
   | { type: 'CLEAR_RECOMMENDATION' };
 

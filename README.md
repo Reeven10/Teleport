@@ -9,6 +9,11 @@ running and gives remote access. Every decision comes with reasons.
 - Contract (source of truth, changes via P1): [contract/contract.ts](contract/contract.ts), mirrored in
   [contract/contract.py](contract/contract.py)
 
+## Quick start (demo laptops)
+
+Double-click **`Teleport.cmd`** (Windows) or **`teleport.command`** (Mac). The first start installs
+everything; then the dashboard opens. Pair, start and migrate from there: see [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
 ## Install
 
 Needs Python 3.11+ and Node 20+.

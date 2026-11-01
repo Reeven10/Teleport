@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from contract.contract import Service
@@ -77,9 +77,11 @@ def build_context(settings: Settings | None = None) -> Context:
     ctx.register("workloads", WorkloadRunner(ctx, CheckpointStore(settings.home)))
     for name, create in _entry_points():
         ctx.register(name, create(ctx))
+    from .discovery import Discovery
     from .peers import PeerDirectory
 
     ctx.register("peer_directory", PeerDirectory(ctx))
+    ctx.register("discovery", Discovery(ctx))
     if ctx.prefs.preferredLink != "auto":
         from .api import apply_preferred_link
 
@@ -185,7 +187,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.include_router(router)
 
     if ctx.settings.uiDist.is_dir():
-        app.mount("/", StaticFiles(directory=ctx.settings.uiDist, html=True), name="ui")
+        dist = ctx.settings.uiDist.resolve()
+        if (dist / "assets").is_dir():
+            app.mount("/assets", StaticFiles(directory=dist / "assets"), name="ui-assets")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        async def ui(path: str) -> FileResponse:
+            """The dashboard. Any page path (/migration, /workloads...) gets index.html, so a refresh or
+            a bookmark works; real files (favicon...) are served as they are."""
+            if path.startswith(("api/", "ws/")):
+                raise HTTPException(404, f"no route /{path}")
+            file = (dist / path).resolve()
+            if path and file.is_file() and file.is_relative_to(dist):
+                return FileResponse(file)
+            return FileResponse(dist / "index.html")
     else:
 
         @app.get("/", include_in_schema=False)

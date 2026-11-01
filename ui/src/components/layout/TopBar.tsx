@@ -1,10 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { apiFetchPairInfo } from '../../api.ts';
 import { useTeleport } from '../../store/useTeleport.ts';
 import { PairDialog } from '../pairing/PairDialog.tsx';
 
 export function TopBar() {
   const { state, toggleTheme, toggleMockFeeder } = useTeleport();
   const [isPairOpen, setIsPairOpen] = useState(false);
+  const [pin, setPin] = useState<string>('');
+
+  // This device's pairing PIN, always visible so the other laptop's user can read it off this screen.
+  useEffect(() => {
+    if (!state.agentReachable) return;
+    let stop = false;
+    const load = () =>
+      apiFetchPairInfo()
+        .then((info) => !stop && setPin(info.pin ?? ''))
+        .catch(() => undefined);
+    load();
+    const timer = window.setInterval(load, 10000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [state.agentReachable]);
 
   const thisDevice = state.devices[state.thisDeviceId];
   const peerDevice = state.peerDeviceId ? state.devices[state.peerDeviceId] : null;
@@ -107,6 +125,17 @@ export function TopBar() {
             <span>Feeder:</span>
             <span className="font-bold">{state.mockFeederActive ? 'MOCK' : 'LIVE'}</span>
           </button>
+
+          {pin && (
+            <div
+              data-testid="topbar-pin"
+              title="Enter this PIN on the other device to pair with this one"
+              className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200"
+            >
+              <span>Pairing PIN</span>
+              <span className="font-mono font-bold tracking-widest">{pin}</span>
+            </div>
+          )}
 
           {/* Pair Device Button */}
           <button

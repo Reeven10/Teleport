@@ -38,7 +38,7 @@ about 3 min), `npm run test:ui`, `npm run e2e`, `npm run typecheck`, `npm run li
 | --- | --- | --- | --- | --- |
 | T1 | Low battery, auto mode: migrates by itself | auto | `test_matrix.py::test_t1_low_battery_auto_mode_migrates` | PASS |
 | T1b | Low battery, recommend mode: recommendation only | auto | `test_matrix.py::test_t1b_low_battery_recommend_mode_only_recommends` | PASS |
-| T1c | A peer's low battery must not move this device's workload | auto | `test_matrix.py::test_t1c_peer_low_battery_does_not_move_local_workloads` (xfail strict) | **FAIL** (P3-6) |
+| T1c | A peer's low battery must not move this device's workload | auto | `test_matrix.py::test_t1c_peer_low_battery_does_not_move_local_workloads` | PASS (P3-6 fixed) |
 | T2 | CPU pressure (>= 90% for 20 s) | auto | `test_matrix.py::test_t2_cpu_pressure_recommends_after_sustained_load` | PASS |
 | T3 | Lost connectivity | auto | `test_matrix.py::test_t3_lost_connectivity_is_detected_and_recommended` (xfail strict) | **FAIL** (P2-8, P3-7) |
 | T4 | User command | auto | `test_scenarios.py::test_2_migrate_counter_job_to_b` (trigger `user_command`) | PASS |
@@ -93,6 +93,12 @@ Every row must end COMPLETED or ROLLED_BACK, with a short dashboard message, and
 | S5 | Remote access needs consent and a token | auto | `tests/remote/test_consent_and_tokens.py` | PASS |
 
 ## Dashboard and code health
+
+| ID | Case | How | Test / what to check | Result |
+| --- | --- | --- | --- | --- |
+| G1 | No-terminal flow: launcher, LAN discovery, pairing with the PIN shown on screen, one-click apps, refresh on any page | auto + manual | `tests/core/test_gui_flow.py`; two agents on this laptop driven from the dashboard | PASS |
+| G2 | VS Code project migrates with tabs, cursors and unsaved edits; A's window closes | manual (real VS Code) | Workloads > VS Code project > Migrate; check B's `state.json` and VS Code process counts | PASS (interruption 205 ms) |
+
 
 | ID | Case | How | Test / what to check | Result |
 | --- | --- | --- | --- | --- |

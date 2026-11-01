@@ -172,6 +172,11 @@ def get_installed_libraries() -> list[str]:
                 name = dist.metadata["Name"]
             if name:
                 pkgs.add(str(name).lower())
+        # Desktop apps that ready-made workloads need count as libs too, so feasibility checks them.
+        from teleport.apps.vscode import find_vscode
+
+        if find_vscode() is not None:
+            pkgs.add("vscode")
         _libs_cache = sorted(pkgs)
     except Exception:
         _libs_cache = []
@@ -297,4 +302,3 @@ def probe_local_device(ctx: Context) -> DeviceInfo:
         "simulated": None,
     }
     return DeviceInfo.model_validate(info)
-

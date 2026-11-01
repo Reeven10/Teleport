@@ -20,16 +20,26 @@ export async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** The agent's own explanation (`{"detail": "..."}`) when there is one, else the HTTP status. */
+async function errorMessage(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '');
+  try {
+    const body = JSON.parse(text) as { detail?: unknown };
+    if (typeof body.detail === 'string') return body.detail;
+    if (Array.isArray(body.detail)) return body.detail.map((d: { msg?: string }) => d.msg ?? '').join('; ');
+  } catch {
+    /* not JSON */
+  }
+  return text || `${res.status} ${res.statusText}`;
+}
+
 export async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${agentBase}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${path}: ${errorText || res.statusText}`);
-  }
+  if (!res.ok) throw new Error(await errorMessage(res));
   return (await res.json()) as T;
 }
 
@@ -159,11 +169,23 @@ export async function apiFetchWorkloads(): Promise<WorkloadItem[]> {
 }
 
 export async function apiPairDevice(addr: string, pin: string): Promise<{ ok: boolean; device?: DeviceInfo; error?: string }> {
-  return postJson<{ ok: boolean; device?: DeviceInfo; error?: string }>('/api/pair', { addr, pin });
+  // The agent answers with the paired device (DeviceInfo), or an HTTP error with a detail message.
+  try {
+    const device = await postJson<DeviceInfo>('/api/pair', { addr: addr.trim(), pin: pin.trim() });
+    return { ok: true, device };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function apiStartWorkload(manifestPath: string): Promise<{ ok: boolean; workloadId?: string; error?: string }> {
-  return postJson<{ ok: boolean; workloadId?: string; error?: string }>('/api/workloads/start', { manifestPath });
+  // The agent answers with the started workload's manifest.
+  try {
+    const manifest = await postJson<WorkloadManifest>('/api/workloads/start', { manifestPath: manifestPath.trim() });
+    return { ok: true, workloadId: manifest.id };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function apiStartMigration(
@@ -263,4 +285,56 @@ export async function apiStatsOverride(
   } | null,
 ): Promise<{ ok: boolean }> {
   return postJson<{ ok: boolean }>('/api/dev/stats-override', { deviceId, stats });
+}
+
+// ---------------------------------------------------------------- pairing, discovery, ready-made apps
+
+export interface NearbyDevice {
+  deviceId: string;
+  name: string;
+  os: string;
+  addr: string;
+  lastSeen: number;
+  paired: boolean;
+}
+
+export interface PairInfo {
+  deviceId: string;
+  name: string;
+  pin?: string; // only given to the dashboard running on this same device
+}
+
+export interface AppTemplate {
+  id: string;
+  title: string;
+  description: string;
+  manifestPath: string | null;
+  needs: 'projectPath' | null;
+  available: boolean;
+  detail?: string;
+}
+
+export async function apiFetchDiscovery(): Promise<NearbyDevice[]> {
+  return getJson<NearbyDevice[]>('/api/discovery');
+}
+
+export async function apiFetchPairInfo(): Promise<PairInfo> {
+  return getJson<PairInfo>('/api/pair');
+}
+
+export async function apiFetchApps(): Promise<AppTemplate[]> {
+  return getJson<AppTemplate[]>('/api/apps');
+}
+
+export async function apiOpenVSCodeProject(projectPath: string): Promise<{ ok: boolean; manifest?: WorkloadManifest; error?: string }> {
+  try {
+    const manifest = await postJson<WorkloadManifest>('/api/apps/vscode', { projectPath: projectPath.trim() });
+    return { ok: true, manifest };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function apiStopWorkload(workloadId: string): Promise<WorkloadRun> {
+  return postJson<WorkloadRun>(`/api/workloads/${encodeURIComponent(workloadId)}/stop`, {});
 }

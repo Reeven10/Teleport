@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DeviceInfo } from '@contract';
-import { apiPairDevice } from '../../api.ts';
+import { apiFetchDiscovery, apiFetchPairInfo, apiPairDevice, type NearbyDevice } from '../../api.ts';
 import { useTeleport } from '../../store/useTeleport.ts';
 import { formatArch, formatOs } from '../../utils/formatters.ts';
 
@@ -12,11 +12,36 @@ interface PairDialogProps {
 
 export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps) {
   const { state, addPairedDevice, selectPeer } = useTeleport();
-  const [address, setAddress] = useState(initialAddress || '192.168.1.102:8765');
-  const [pin, setPin] = useState('749218');
-  const [localPin] = useState('381904'); // Local PIN for the peer to enter
+  const [address, setAddress] = useState(initialAddress || '');
+  const [pin, setPin] = useState('');
+  const [localPin, setLocalPin] = useState<string>('');
+  const [nearby, setNearby] = useState<NearbyDevice[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Live mode: this device's real PIN (the agent shows it only to its own dashboard) and the
+  // Teleport devices heard on the local network, refreshed every 2 s while the dialog is open.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!state.agentReachable) {
+      setLocalPin('381904'); // simulation only
+      return;
+    }
+    let stop = false;
+    apiFetchPairInfo()
+      .then((info) => !stop && setLocalPin(info.pin ?? ''))
+      .catch(() => !stop && setLocalPin(''));
+    const refresh = () =>
+      apiFetchDiscovery()
+        .then((list) => !stop && setNearby(list))
+        .catch(() => undefined);
+    refresh();
+    const timer = window.setInterval(refresh, 2000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [isOpen, state.agentReachable]);
 
   if (!isOpen) return null;
 
@@ -104,6 +129,50 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
           </button>
         </div>
 
+        {/* Nearby Teleport devices on this network (LAN discovery) */}
+        {state.agentReachable && (
+          <div className="mt-4" data-testid="nearby-devices">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Nearby devices
+            </p>
+            {nearby.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Looking for Teleport on this network... Start Teleport on the other laptop (same wifi or cable),
+                or type its address below.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {nearby.map((d) => (
+                  <li
+                    key={d.deviceId}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                      address === d.addr
+                        ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-600 dark:bg-indigo-950/40'
+                        : 'border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <span>
+                      <span className="font-semibold text-slate-900 dark:text-white">{d.name}</span>
+                      <span className="ml-2 font-mono text-xs text-slate-500">{d.addr}</span>
+                    </span>
+                    {d.paired ? (
+                      <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Paired</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAddress(d.addr)}
+                        className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
+                      >
+                        Select
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {/* Pairing Form */}
         <form onSubmit={handlePair} className="mt-4 space-y-4">
           <div>
@@ -128,7 +197,7 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                 type="text"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
-                placeholder="e.g. 749218"
+                placeholder="PIN shown on the other device"
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3.5 py-2 font-mono text-sm tracking-widest text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </div>
@@ -137,8 +206,8 @@ export function PairDialog({ isOpen, onClose, initialAddress }: PairDialogProps)
                 This Device PIN
               </label>
               <div className="mt-1 flex h-[38px] items-center justify-between rounded-lg border border-dashed border-indigo-300 bg-indigo-50/60 px-3 font-mono text-sm font-bold tracking-widest text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
-                <span>{localPin}</span>
-                <span className="text-[10px] uppercase text-indigo-500 font-sans">Ready</span>
+                <span data-testid="local-pin">{localPin || '------'}</span>
+                <span className="text-[10px] uppercase text-indigo-500 font-sans">Tell the other device</span>
               </div>
             </div>
           </div>

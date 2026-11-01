@@ -114,6 +114,7 @@ export function TeleportProvider({ children }: { children: ReactNode }) {
   // REST initialization & WebSocket connection
   useEffect(() => {
     let unmounted = false;
+    let everReachable = false;
 
     async function initRest() {
       try {
@@ -129,6 +130,7 @@ export function TeleportProvider({ children }: { children: ReactNode }) {
           ]);
 
         if (!unmounted && health.ok) {
+          everReachable = true;
           dispatch({
             type: 'INIT_REST',
             payload: {
@@ -144,8 +146,8 @@ export function TeleportProvider({ children }: { children: ReactNode }) {
           dispatch({ type: 'SET_AGENT_REACHABLE', payload: true });
         }
       } catch {
-        // Agent not reachable -> activate mock feeder
-        if (!unmounted) {
+        // Agent never reached: offline mock mode. Once it was reachable, a failure is just a blip.
+        if (!unmounted && !everReachable) {
           dispatch({ type: 'SET_AGENT_REACHABLE', payload: false });
           dispatch({ type: 'TOGGLE_MOCK_FEEDER', payload: true });
         }
@@ -161,17 +163,35 @@ export function TeleportProvider({ children }: { children: ReactNode }) {
         }
       },
       (connected: boolean) => {
-        if (!unmounted) {
-          dispatch({ type: 'SET_WS_CONNECTED', payload: connected });
-          if (!connected) {
-            dispatch({ type: 'TOGGLE_MOCK_FEEDER', payload: true });
-          }
+        if (unmounted) return;
+        dispatch({ type: 'SET_WS_CONNECTED', payload: connected });
+        if (connected && everReachable) {
+          initRest(); // (re)connected: reload the real state, events may have been missed meanwhile
+        } else if (!connected && !everReachable) {
+          dispatch({ type: 'TOGGLE_MOCK_FEEDER', payload: true });
         }
       },
     );
 
+    // Safety net for "steps not updating": while a migration runs, also poll its status.
+    const poll = window.setInterval(async () => {
+      if (unmounted || !everReachable) return;
+      try {
+        const [workloads, runs] = await Promise.all([apiFetchWorkloads(), apiFetchWorkloadRuns()]);
+        dispatch({ type: 'SET_WORKLOADS', payload: { workloads, runs } });
+        const migrations = await apiFetchMigrations();
+        const live = migrations.filter((m) => !['COMPLETED', 'ROLLED_BACK', 'REMOTE_ACCESS', 'FAILED'].includes(m.phase));
+        for (const m of live.length ? live : migrations.slice(-1)) {
+          dispatch({ type: 'BUS_EVENT', payload: { t: 'migration.status', status: m } });
+        }
+      } catch {
+        /* agent briefly unreachable: the WebSocket reconnect reloads everything */
+      }
+    }, 1500);
+
     return () => {
       unmounted = true;
+      window.clearInterval(poll);
       disconnectWs();
     };
   }, []);
