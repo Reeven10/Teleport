@@ -104,6 +104,7 @@ class PeerLinkService(PeerLink):
         self._peer_loss: dict[str, float] = {}
         self._unsub_stats: Any = None
         self._preferred: dict[str, str] = self._load_preferred()  # device id -> host:port that worked
+        self._forgotten: set[str] = self._load_forgotten()  # refused until they pair again with a PIN
 
         self.router = APIRouter()
         self._setup_routes()
@@ -198,6 +199,7 @@ class PeerLinkService(PeerLink):
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid DeviceInfo payload: {e}") from e
 
+            self._unforget(peer_info.id)
             # Record peer Ed25519 public key (TOFU enforcement)
             if payload.identityKey:
                 try:
@@ -279,6 +281,10 @@ class PeerLinkService(PeerLink):
                         await adapter.close()
                         return
 
+                    if peer_id in self._forgotten:
+                        log.info("Refused %s: this device was forgotten; pair again to reconnect", peer_id)
+                        await adapter.close()
+                        return
                     self.pairing.peer_keys.record_peer_key(peer_id, peer_id_bytes)
                     session.establish(peer_eph_bytes, peer_id_bytes, is_initiator=False)
                 else:
@@ -343,6 +349,7 @@ class PeerLinkService(PeerLink):
 
         local = self.ctx.devices.local_info()
         remote_device = await self.pairing.initiate_remote_pair(addr, pin, local)
+        self._unforget(remote_device.id)
         # The address we paired over is one that works: dial it first from now on (it beats any
         # virtual adapter the peer also advertises, e.g. VirtualBox shown as "cable").
         self._remember_addr(remote_device.id, _host_port(addr))
@@ -356,6 +363,44 @@ class PeerLinkService(PeerLink):
             await self.connect(remote_device.id)
 
         return remote_device
+
+    def _forgotten_path(self) -> Path:
+        return self.ctx.settings.home / "forgotten_peers.json"
+
+    def _load_forgotten(self) -> set[str]:
+        try:
+            data = json.loads(self._forgotten_path().read_text("utf-8"))
+            return {str(x) for x in data} if isinstance(data, list) else set()
+        except (OSError, ValueError):
+            return set()
+
+    def _save_forgotten(self) -> None:
+        with contextlib.suppress(OSError):
+            self._forgotten_path().write_text(json.dumps(sorted(self._forgotten)), "utf-8")
+
+    def _unforget(self, device_id: str) -> None:
+        if device_id in self._forgotten:
+            self._forgotten.discard(device_id)
+            self._save_forgotten()
+
+    async def forget_all(self, device_ids: set[str]) -> None:
+        """Start fresh: drop every link, trusted key and remembered address. Those devices are refused
+        until they pair again with a PIN (otherwise they would simply reconnect)."""
+        ids = set(device_ids) | set(self._connections)
+        ids.discard(self.ctx.device_id)
+        self._forgotten |= ids
+        self._save_forgotten()
+        for peer_id in ids:
+            if conn := self._connections.pop(peer_id, None):
+                with contextlib.suppress(Exception):
+                    await conn.close()
+            self._previous_link_types.pop(peer_id, None)
+            self._peer_loss.pop(peer_id, None)
+            self._peer_faults.pop(peer_id, None)
+            self._preferred.pop(peer_id, None)
+        with contextlib.suppress(OSError):
+            self._preferred_path().write_text(json.dumps(self._preferred), "utf-8")
+        self.pairing.peer_keys.forget(ids)
 
     def _preferred_path(self) -> Path:
         return self.ctx.settings.home / "peer_addrs.json"
@@ -553,7 +598,7 @@ class PeerLinkService(PeerLink):
         if old_conn := self._connections.pop(peer_id, None):
             self._peer_loss[peer_id] = old_conn.loss_pct
 
-        if peer_id in self._reconnecting:
+        if peer_id in self._reconnecting or peer_id in self._forgotten:
             return
 
         self._reconnecting.add(peer_id)

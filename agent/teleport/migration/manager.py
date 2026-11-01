@@ -411,6 +411,23 @@ class MigrationManager:
         runs = [*self._archived.values(), *live]
         return [s.model_copy(deep=True) for s in sorted(runs, key=lambda s: s.startedAt)]
 
+    def forget_finished(self) -> int:
+        """Start fresh: drop finished migrations (list and journal). Running ones are kept."""
+        gone = [mid for mid, st in self._archived.items() if st.phase in TERMINAL]
+        gone += [mid for mid, r in self._sources.items() if r.status.phase in TERMINAL]
+        gone += [mid for mid, t in self._targets.items() if t.status.phase in TERMINAL]
+        for mid in set(gone):
+            self._archived.pop(mid, None)
+            self._sources.pop(mid, None)
+            self._targets.pop(mid, None)
+            self.journal.forget(mid)
+        self._recent_conflicts.clear()
+        return len(set(gone))
+
+    def busy(self) -> bool:
+        live = [r.status for r in self._sources.values()] + [t.status for t in self._targets.values()]
+        return any(st.phase not in TERMINAL for st in live)
+
     # ------------------------------------------------------------------ shared helpers
 
     async def _publish(self, status: MigrationStatus) -> None:
@@ -809,7 +826,7 @@ class MigrationManager:
         fence_start = time.perf_counter()
         await self._phase(run, "FENCING")
         self.host.pause(wid)
-        fenced = await auth.fence(wid)
+        fenced = await auth.fence(wid, st.id)
         run.fence_epoch = fenced.epoch
         st.authority = fenced
         await self._send(target, MigFence(migrationId=st.id, epoch=fenced.epoch))
@@ -845,7 +862,7 @@ class MigrationManager:
         run.start_ms = (now - start_sent_at) * 1000
         st.interruptionMs = round((now - fence_start) * 1000, 1)
         await self._publish(st)  # journal the commit before anything else
-        await auth.grant(wid, target, fenced.epoch)
+        await auth.grant(wid, target, fenced.epoch, st.id)
         await self.host.kill(wid)
         await asyncio.to_thread(self._cache_code, run)
         await self._finish(run, "COMPLETED")
@@ -937,8 +954,9 @@ class MigrationManager:
         except Exception:
             log.info("%s: could not tell the target to discard (%s)", st.id, reason)
         lease = self.ctx.authority.get(wid)
-        if lease.state == "FENCED" and lease.holder == self.ctx.device_id:
-            await self.ctx.authority.rollback(wid)
+        ours = lease.migrationId in (None, st.id)  # never undo a fence another migration made
+        if lease.state == "FENCED" and lease.holder == self.ctx.device_id and ours:
+            await self.ctx.authority.rollback(wid, st.id)
         try:
             if self._local_state(wid) == "paused":
                 self.host.resume(wid)
@@ -1041,7 +1059,7 @@ class MigrationManager:
         if entry.committed or (lease.holder == target and lease.state == "TARGET"):
             # Authority had already moved: the old source stays stopped.
             if lease.holder != target:
-                await auth.grant(wid, target, entry.fenceEpoch or lease.epoch)
+                await auth.grant(wid, target, entry.fenceEpoch or lease.epoch, st.id)
             await self._kill_local(wid)
             _note(
                 st,
@@ -1522,7 +1540,7 @@ class MigrationManager:
         try:
             code_dir = await asyncio.to_thread(self._commit_staged, tgt)
             self.host.register(tgt.manifest, code_dir)
-            st.authority = await self.ctx.authority.grant(wid, self.ctx.device_id, msg.epoch)
+            st.authority = await self.ctx.authority.grant(wid, self.ctx.device_id, msg.epoch, st.id)
             granted = True
             await self._publish(st)  # journal the grant: a restart from here waits for the source
             await self.host.start(wid, restore=True)

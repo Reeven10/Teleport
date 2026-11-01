@@ -27,8 +27,8 @@ export function DashboardPage() {
         actions={
           <>
             <span className="tp-chip">{Object.keys(state.devices).length} devices</span>
-            <span className="tp-chip">
-              epoch <span className="font-mono text-ink">{state.authority?.epoch ?? 0}</span>
+            <span className="tp-chip" title="Each workload has its own authority lease">
+              {running.length} running here
             </span>
           </>
         }

@@ -1,7 +1,8 @@
-import type { Phase } from '@contract';
+import type { FeasibilityResult, MigrationStatus, Phase } from '@contract';
 import { useEffect, useRef, useState } from 'react';
 import { useTeleport } from '../store/useTeleport.ts';
-import { apiStartMigration, apiAbortMigration } from '../api.ts';
+import { apiStartMigration, apiAbortMigration, apiCheckFeasibility, apiFetchMigrations } from '../api.ts';
+import { CompatibilityCard } from '../components/migration/CompatibilityCard.tsx';
 import { PhaseStepper } from '../components/migration/PhaseStepper.tsx';
 import { FeasibilityPanel } from '../components/migration/FeasibilityPanel.tsx';
 import { CheckpointGrid } from '../components/migration/CheckpointGrid.tsx';
@@ -34,10 +35,43 @@ export function MigrationPage() {
   const [showStartModal, setShowStartModal] = useState(false);
   const [targetId, setTargetId] = useState<string>('');
   const [workloadId, setWorkloadId] = useState<string>('');
+  const [feasibility, setFeasibility] = useState<FeasibilityResult | null>(null);
+  const [checking, setChecking] = useState(false);
+  // The compatibility card in the start dialog: re-evaluated whenever the workload or target changes.
+  useEffect(() => {
+    if (!showStartModal || !workloadId || !targetId || !state.agentReachable || state.mockFeederActive) return;
+    let alive = true;
+    setChecking(true);
+    setFeasibility(null);
+    apiCheckFeasibility(workloadId, targetId)
+      .then((res) => alive && setFeasibility(res))
+      .catch(() => alive && setFeasibility(null))
+      .finally(() => alive && setChecking(false));
+    return () => {
+      alive = false;
+    };
+  }, [showStartModal, workloadId, targetId, state.agentReachable, state.mockFeederActive]);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const mig = state.migrationStatus;
+  // Every migration has its own status and its own lease: list them all and show the chosen one.
+  const [all, setAll] = useState<MigrationStatus[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!state.agentReachable || state.mockFeederActive) return;
+    let alive = true;
+    const load = () =>
+      apiFetchMigrations()
+        .then((list) => alive && setAll(list.slice(-8).reverse()))
+        .catch(() => {});
+    load();
+    const timer = window.setInterval(load, 1500);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [state.agentReachable, state.mockFeederActive]);
+  const mig = (selectedId ? all.find((m) => m.id === selectedId) : null) ?? state.migrationStatus;
   const timeline = usePhaseTimeline(mig?.id, mig?.phase);
   const isMigrating =
     mig &&
@@ -256,6 +290,33 @@ export function MigrationPage() {
         </div>
       )}
 
+      {all.length > 1 && (
+        <div data-testid="migration-tabs" className="flex flex-wrap gap-2">
+          {all.map((m) => {
+            const active = m.id === mig?.id;
+            const live = !['COMPLETED', 'ROLLED_BACK', 'FAILED', 'REMOTE_ACCESS'].includes(m.phase);
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setSelectedId(m.id)}
+                className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                  active ? 'border-ink bg-surface' : 'border-line hover:bg-surface'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-ink">
+                  {live && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                  {state.workloads.find((w) => w.manifest.id === m.workloadId)?.manifest.name ?? m.workloadId}
+                </span>
+                <span className="font-mono text-[10.5px] text-faint">
+                  {m.phase.toLowerCase()} · lease e{m.authority.epoch} · {m.id.slice(-6)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <RecommendationBanner />
 
       <Bridge
@@ -307,12 +368,11 @@ export function MigrationPage() {
       {/* Start Migration Modal */}
       {showStartModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-ink">
-              Initiate Workload Migration
-            </h3>
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-canvas p-6 shadow-2xl">
+            <p className="tp-label">Migrate</p>
+            <h3 className="mt-1 font-serif text-2xl text-ink">Start a migration</h3>
             <p className="mt-1 text-xs text-muted">
-              Select workload and designated peer node to begin zero-downtime checkpoint synchronization.
+              Pick the workload and the laptop to move it to. Check the compatibility below, then start.
             </p>
 
             <div className="mt-5 space-y-4">
@@ -358,6 +418,26 @@ export function MigrationPage() {
                 </select>
               </div>
             </div>
+
+            {state.agentReachable && !state.mockFeederActive && workloadId && targetId && (
+              <div className="mt-5">
+                {(() => {
+                  const wl = state.workloads.find((w) => w.manifest.id === workloadId);
+                  return wl ? (
+                    <CompatibilityCard
+                      manifest={wl.manifest}
+                      source={state.devices[state.thisDeviceId]}
+                      sourceStats={state.stats[state.thisDeviceId]}
+                      target={state.devices[targetId]}
+                      targetStats={state.stats[targetId]}
+                      link={state.link}
+                      feasibility={feasibility}
+                      loading={checking}
+                    />
+                  ) : null;
+                })()}
+              </div>
+            )}
 
             <div className="mt-6 flex justify-end gap-2">
               <button

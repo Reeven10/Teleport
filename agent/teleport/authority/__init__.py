@@ -1,5 +1,9 @@
 """Authority (P1): single active instance per workload via an epoch-numbered lease.
 
+Each workload has its own lease, and every transition a migration makes is stamped with that
+migration's id: two migrations of different workloads never share or touch a lease, and a message
+from an older migration of the same workload is refused (its epoch is behind, or its id does not match).
+
 Handover SOURCE -> FENCED (epoch + 1) -> TARGET; rollback FENCED -> SOURCE (epoch + 1).
 Epochs never decrease, so anything carrying an older epoch is stale and rejected.
 Each device keeps its own view in TELEPORT_HOME/authority.json.
@@ -86,23 +90,46 @@ class AuthorityStore:
         await self.ctx.bus.publish(AuthorityChangeEvent(authority=lease))
         return lease
 
+    def owned_by(self, workload_id: str, migration_id: str) -> bool:
+        """True while `migration_id` is the migration that last set this workload's lease."""
+        return self.get(workload_id).migrationId == migration_id
+
     async def claim(self, workload_id: str, holder: str) -> Authority:
         cur = self.get(workload_id)
         if cur.holder not in (None, holder) and cur.state != "SOURCE":
             raise AuthorityError(f"{workload_id} is held by {cur.holder} ({cur.state})")
         return await self._set(cur.model_copy(update={"holder": holder, "state": "SOURCE"}))
 
-    async def fence(self, workload_id: str) -> Authority:
+    async def fence(self, workload_id: str, migration_id: str | None = None) -> Authority:
         cur = self.get(workload_id)
         if cur.state != "SOURCE" or cur.holder != self.ctx.device_id:
             raise AuthorityError(f"cannot fence {workload_id}: {cur.state} held by {cur.holder}")
-        return await self._set(cur.model_copy(update={"state": "FENCED", "epoch": cur.epoch + 1}))
+        update = {"state": "FENCED", "epoch": cur.epoch + 1, "migrationId": migration_id}
+        return await self._set(cur.model_copy(update=update))
 
-    async def grant(self, workload_id: str, holder: str, epoch: int) -> Authority:
+    async def grant(
+        self, workload_id: str, holder: str, epoch: int, migration_id: str | None = None
+    ) -> Authority:
         cur = self.get(workload_id)
         if epoch < cur.epoch:
             raise AuthorityError(f"stale epoch {epoch} < {cur.epoch} for {workload_id}")
-        lease = Authority(workloadId=workload_id, holder=holder, epoch=epoch, state="TARGET")
+        if (
+            epoch == cur.epoch
+            and migration_id
+            and cur.migrationId
+            and cur.migrationId != migration_id
+            and cur.state != "FENCED"
+        ):
+            raise AuthorityError(
+                f"epoch {epoch} of {workload_id} belongs to migration {cur.migrationId}, not {migration_id}"
+            )
+        lease = Authority(
+            workloadId=workload_id,
+            holder=holder,
+            epoch=epoch,
+            state="TARGET",
+            migrationId=migration_id or cur.migrationId,
+        )
         return await self._set(lease)
 
     async def release(self, workload_id: str) -> Authority:
@@ -111,10 +138,12 @@ class AuthorityStore:
             return cur
         return await self._set(cur.model_copy(update={"holder": None, "state": "SOURCE"}))
 
-    async def rollback(self, workload_id: str) -> Authority:
+    async def rollback(self, workload_id: str, migration_id: str | None = None) -> Authority:
         cur = self.get(workload_id)
         if cur.state != "FENCED":
             raise AuthorityError(f"cannot roll back {workload_id} in state {cur.state}")
+        if migration_id and cur.migrationId and cur.migrationId != migration_id:
+            raise AuthorityError(f"{workload_id} was fenced by {cur.migrationId}, not {migration_id}")
         return await self._set(cur.model_copy(update={"state": "SOURCE", "epoch": cur.epoch + 1}))
 
     async def reconcile(self, remote: Authority) -> bool:
@@ -127,6 +156,17 @@ class AuthorityStore:
             await self._set(remote)
             return True
         return False
+
+    async def forget_foreign(self) -> int:
+        """Start fresh: drop leases this device does not hold (they name forgotten devices)."""
+        with self._lock:
+            mine = {k: v for k, v in self._leases.items() if v.holder == self.ctx.device_id}
+            dropped = len(self._leases) - len(mine)
+            self._leases = mine
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({k: v.model_dump() for k, v in mine.items()}, indent=2), "utf-8")
+            tmp.replace(self.path)
+        return dropped
 
     async def startup(self) -> None:
         pass

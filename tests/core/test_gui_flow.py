@@ -63,7 +63,7 @@ def test_vscode_workload_folder(tmp_path: Path) -> None:
     (project / "src" / "main.py").write_text("print('hi')\n")
     folder = create_vscode_workload(tmp_path / "home", str(project))
     manifest = yaml.safe_load((folder / "teleport.yaml").read_text())
-    assert manifest["id"] == "vscode-my-project" and "vscode" in manifest["libs"]
+    assert manifest["id"].startswith("vscode-my-project-") and "vscode" in manifest["libs"]
     assert [c["id"] for c in manifest["checkpoints"]] == ["project", "session"]
     assert manifest["checkpoints"][0]["paths"] == ["project"]
     assert (folder / "vscode_job.py").is_file() and (folder / "extension" / "extension.js").is_file()
@@ -73,9 +73,9 @@ def test_vscode_workload_folder(tmp_path: Path) -> None:
 
 
 def test_apps_gallery_and_stop_from_the_dashboard(tmp_path: Path) -> None:
-    assert {a["id"] for a in gallery()} == {"counter", "vscode"}
+    assert {a["id"] for a in gallery()} == {"counter", "vscode", "server"}
     with TestClient(create_app(Settings(home=tmp_path / "home", uiDist=tmp_path / "x"))) as client:
-        assert {a["id"] for a in client.get("/api/apps").json()} == {"counter", "vscode"}
+        assert {a["id"] for a in client.get("/api/apps").json()} == {"counter", "vscode", "server"}
         assert (
             client.post("/api/apps/vscode", json={"projectPath": str(tmp_path / "nope")}).status_code == 404
         )

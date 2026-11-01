@@ -3,6 +3,7 @@ agent that restarts mid-migration can decide the safe state (see MigrationManage
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 from typing import Literal
@@ -39,6 +40,10 @@ class MigrationJournal:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(entry.model_dump_json(), "utf-8")
         replace_file(tmp, path)
+
+    def forget(self, migration_id: str) -> None:
+        with contextlib.suppress(OSError):
+            (self.dir / f"{migration_id}.json").unlink()
 
     def load_all(self) -> list[JournalEntry]:
         if not self.dir.is_dir():

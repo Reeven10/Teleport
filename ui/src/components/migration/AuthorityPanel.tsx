@@ -18,9 +18,10 @@ export function AuthorityPanel({ authority, deviceA, deviceB }: AuthorityPanelPr
   return (
     <div className="tp-card p-6">
       <div className="flex items-baseline justify-between">
-        <p className="tp-label">Authority</p>
-        <span data-testid="authority-epoch" className="font-mono text-xs text-muted">
-          Epoch {epoch}
+        <p className="tp-label">Authority for this workload</p>
+        <span className="font-mono text-xs text-muted">
+          <span data-testid="authority-epoch">Epoch {epoch}</span>
+          {authority?.migrationId && <span className="text-faint"> · set by {authority.migrationId}</span>}
         </span>
       </div>
 

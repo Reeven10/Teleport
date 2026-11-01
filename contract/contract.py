@@ -178,6 +178,7 @@ class Authority(ContractModel):
     holder: str | None
     epoch: int
     state: AuthorityState
+    migrationId: str | None = None  # the migration that set this lease; None if never migrated
 
 
 class CheckpointMetric(ContractModel):
@@ -621,20 +622,24 @@ class AuthorityService(Service, Protocol):
         """Become SOURCE for a workload started locally (epoch kept, 0 if new)."""
         ...
 
-    async def fence(self, workload_id: str) -> Authority:
-        """SOURCE -> FENCED, epoch + 1. Only the holder may fence."""
+    async def fence(self, workload_id: str, migration_id: str | None = None) -> Authority:
+        """SOURCE -> FENCED, epoch + 1, stamped with the migration that fences. Only the holder may fence."""
         ...
 
-    async def grant(self, workload_id: str, holder: str, epoch: int) -> Authority:
-        """Record `holder` as TARGET at `epoch`. Raises if `epoch` is older than the current one."""
+    async def grant(
+        self, workload_id: str, holder: str, epoch: int, migration_id: str | None = None
+    ) -> Authority:
+        """Record `holder` as TARGET at `epoch` for `migration_id`. Raises if `epoch` is older than the
+        current one, or if that epoch was issued by a different migration."""
         ...
 
     async def release(self, workload_id: str) -> Authority:
         """This device gives the lease up (holder None, epoch kept)."""
         ...
 
-    async def rollback(self, workload_id: str) -> Authority:
-        """FENCED -> SOURCE, epoch + 1 so a target started at the fence epoch is now stale."""
+    async def rollback(self, workload_id: str, migration_id: str | None = None) -> Authority:
+        """FENCED -> SOURCE, epoch + 1 so a target started at the fence epoch is now stale. Only the
+        migration that fenced may roll back."""
         ...
 
     def check_epoch(self, workload_id: str, epoch: int) -> bool:

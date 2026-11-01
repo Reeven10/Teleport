@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
+import type { Authority, FeasibilityResult, WorkloadRun } from '@contract';
 import { useNavigate } from 'react-router-dom';
 import {
+  apiCheckFeasibility,
   apiFetchApps,
+  apiFetchAuthority,
+  apiFetchWorkloadRuns,
   apiOpenVSCodeProject,
   apiStartMigration,
   apiStartWorkload,
@@ -12,6 +16,9 @@ import { useTeleport } from '../store/useTeleport.ts';
 import type { WorkloadItem } from '../store/types.ts';
 import { formatMb } from '../utils/formatters.ts';
 import { Icon, LiveDot, PageHeader } from '../components/ui/Icon.tsx';
+import { FolderField } from '../components/ui/FolderField.tsx';
+import { ServerAppCard } from '../components/workloads/ServerAppCard.tsx';
+import { CompatibilityCard } from '../components/migration/CompatibilityCard.tsx';
 
 export function WorkloadsPage() {
   const { state, addWorkload } = useTeleport();
@@ -26,6 +33,32 @@ export function WorkloadsPage() {
     if (!state.agentReachable) return;
     apiFetchApps().then(setApps).catch(() => setApps([]));
   }, [state.agentReachable]);
+
+  // Each workload's own lease and its latest log line (installing, ready on http://localhost:...).
+  const [leases, setLeases] = useState<Record<string, Authority>>({});
+  const [runs, setRuns] = useState<Record<string, WorkloadRun>>({});
+  useEffect(() => {
+    if (!state.agentReachable || state.mockFeederActive) return;
+    let alive = true;
+    const load = () => {
+      apiFetchAuthority()
+        .then((list) => alive && setLeases(Object.fromEntries(list.map((a) => [a.workloadId, a]))))
+        .catch(() => {});
+      apiFetchWorkloadRuns()
+        .then((list) => alive && setRuns(Object.fromEntries(list.map((r) => [r.workloadId, r]))))
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(load, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [state.agentReachable, state.mockFeederActive]);
+
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [feasibility, setFeasibility] = useState<FeasibilityResult | null>(null);
+  const [checking, setChecking] = useState(false);
 
   async function startApp(app: AppTemplate) {
     setBusy(app.id);
@@ -84,6 +117,22 @@ export function WorkloadsPage() {
   function handleOpenMigrate(wl: WorkloadItem) {
     setSelectedWorkload(wl);
     setIsTargetPickerOpen(true);
+    const others = Object.values(state.devices).filter((d) => d.id !== state.thisDeviceId);
+    void chooseTarget(wl, others.length === 1 ? (others[0]?.id ?? null) : null);
+  }
+
+  async function chooseTarget(wl: WorkloadItem, id: string | null) {
+    setTargetId(id);
+    setFeasibility(null);
+    if (!id || !state.agentReachable) return;
+    setChecking(true);
+    try {
+      setFeasibility(await apiCheckFeasibility(wl.manifest.id, id));
+    } catch {
+      setFeasibility(null);
+    } finally {
+      setChecking(false);
+    }
   }
 
   const peers = Object.values(state.devices).filter((d) => d.id !== state.thisDeviceId);
@@ -113,11 +162,22 @@ export function WorkloadsPage() {
 
       {state.agentReachable && apps.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2" data-testid="app-gallery">
-          {apps.map((app) => (
+          {apps.map((app) =>
+            app.id === 'server' ? (
+              <ServerAppCard
+                key={app.id}
+                app={app}
+                onStarted={(manifest, message) => {
+                  addWorkload({ manifest, status: 'RUNNING' });
+                  setActionMessage(message);
+                }}
+                onError={setActionMessage}
+              />
+            ) : (
             <div key={app.id} data-testid={`app-${app.id}`} className="tp-card flex flex-col p-5">
               <div className="flex items-start gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-raised text-muted">
-                  <Icon name={app.id === 'vscode' ? 'folder' : 'play'} className="h-4 w-4" />
+                  <Icon name={app.id === 'vscode' ? 'folder' : app.id === 'pinned-notes' ? 'remote' : 'play'} className="h-4 w-4" />
                 </span>
                 <div>
                   <h2 className="text-[15px] font-medium text-ink">{app.title}</h2>
@@ -125,13 +185,14 @@ export function WorkloadsPage() {
                 </div>
               </div>
               {app.needs === 'projectPath' && (
-                <input
-                  type="text"
-                  value={projectPath}
-                  onChange={(e) => setProjectPath(e.target.value)}
-                  placeholder="C:\Users\me\projects\demo"
-                  className="mt-4 w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 font-mono text-xs text-ink outline-none placeholder:text-faint focus:border-ink/40"
-                />
+                <div className="mt-4">
+                  <FolderField
+                    value={projectPath}
+                    onChange={setProjectPath}
+                    title="Choose the project to open in VS Code"
+                    testId="vscode-project-path"
+                  />
+                </div>
               )}
               {!app.available && app.detail && <p className="mt-2 text-xs text-bad">{app.detail}</p>}
               <div className="mt-4 flex justify-end">
@@ -145,7 +206,8 @@ export function WorkloadsPage() {
                 </button>
               </div>
             </div>
-          ))}
+            ),
+          )}
         </div>
       )}
 
@@ -158,7 +220,10 @@ export function WorkloadsPage() {
         ) : (
           state.workloads.map((wl) => {
             const m = wl.manifest;
-            const authority = wl.authority ?? state.authority;
+            const authority = leases[m.id] ?? wl.authority;
+            const run = runs[m.id];
+            const lastLine = run?.logTail.filter((l) => l.trim()).at(-1);
+            const readyUrl = run?.logTail.map((l) => /ready on (http:\/\/localhost:\d+)/.exec(l)?.[1]).filter(Boolean).at(-1);
             const running = wl.status === 'RUNNING';
             return (
               <div key={m.id} data-testid={`workload-card-${m.id}`} className="tp-card p-6">
@@ -169,14 +234,28 @@ export function WorkloadsPage() {
                       <h2 className="font-serif text-2xl leading-tight text-ink">{m.name}</h2>
                       <span className="tp-chip font-mono">{wl.status}</span>
                       {authority && (
-                        <span className="tp-chip font-mono">
+                        <span
+                          className="tp-chip font-mono"
+                          title={authority.migrationId ? `set by migration ${authority.migrationId}` : 'never migrated'}
+                        >
                           {authority.state} · epoch {authority.epoch}
+                          {authority.migrationId ? ` · ${authority.migrationId.slice(-6)}` : ''}
                         </span>
                       )}
                     </div>
                     <p className="mt-1 truncate font-mono text-[11px] text-faint">
                       {m.id} · {m.command}
                     </p>
+                    {running && lastLine && (
+                      <p data-testid={`workload-status-${m.id}`} className="mt-1.5 truncate text-xs text-muted" title={lastLine}>
+                        {lastLine.replace(/^\[(server|vscode)\]\s*/, '')}
+                      </p>
+                    )}
+                    {running && readyUrl && (
+                      <a href={readyUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-accent hover:underline">
+                        Open {readyUrl} <Icon name="arrow" className="h-3 w-3" />
+                      </a>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {running && (
@@ -253,23 +332,24 @@ export function WorkloadsPage() {
       {isStartOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-ink">Start Workload by Manifest</h2>
+            <h2 className="font-serif text-2xl text-ink">Start a workload</h2>
             <p className="mt-1 text-xs text-muted">
-              Provide the relative or absolute path to the JSON manifest.
+              Choose a folder that contains a teleport.yaml. For a VS Code project or a server, use the cards
+              above instead.
             </p>
 
             <form onSubmit={handleStartWorkload} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
-                  Manifest Path
-                </label>
-                <input
-                  type="text"
-                  value={manifestPath}
-                  onChange={(e) => setManifestPath(e.target.value)}
-                  placeholder="examples/migratable_ml_trainer/manifest.json"
-                  className="mt-1 w-full rounded-lg border border-line-strong bg-raised px-3.5 py-2 font-mono text-xs text-ink outline-none focus:border-ink/40 focus:ring-1 focus:ring-ink/20"
-                />
+                <label className="tp-label">Workload folder</label>
+                <div className="mt-1">
+                  <FolderField
+                    value={manifestPath}
+                    onChange={setManifestPath}
+                    placeholder="Folder with a teleport.yaml"
+                    title="Choose the workload folder (it contains teleport.yaml)"
+                    testId="manifest-path"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
@@ -292,51 +372,68 @@ export function WorkloadsPage() {
         </div>
       )}
 
-      {/* Migrate Target Picker Modal */}
+      {/* Migrate: pick the target, see the compatibility card, then confirm */}
       {isTargetPickerOpen && selectedWorkload && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-ink">
-              Select Target for &quot;{selectedWorkload.manifest.name}&quot;
-            </h2>
-            <p className="mt-1 text-xs text-muted">
-              The Feasibility Engine will evaluate CPU architecture, dependencies and link quality before handover.
-            </p>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/60 p-4 sm:items-center">
+          <div className="w-full max-w-2xl rounded-2xl border border-line bg-canvas p-6 shadow-2xl">
+            <p className="tp-label">Migrate</p>
+            <h2 className="mt-1 font-serif text-2xl text-ink">{selectedWorkload.manifest.name}</h2>
 
-            <div className="mt-4 space-y-2">
-              {peers.length === 0 ? (
-                <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
-                  No peer devices paired. Pair a device in the top bar first.
-                </div>
-              ) : (
-                peers.map((peer) => (
-                  <div
+            {peers.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-warn/40 bg-warn-soft p-3 text-sm text-ink">
+                No paired device yet: click Pair Device in the top bar first.
+              </p>
+            ) : (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {peers.map((peer) => (
+                  <button
                     key={peer.id}
-                    className="flex items-center justify-between rounded-lg border border-line bg-raised p-3 text-xs"
+                    type="button"
+                    data-testid={`target-${peer.id}`}
+                    onClick={() => void chooseTarget(selectedWorkload, peer.id)}
+                    className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                      targetId === peer.id ? 'border-ink bg-surface' : 'border-line hover:bg-surface'
+                    }`}
                   >
-                    <div>
-                      <span className="font-semibold text-ink">{peer.name}</span>
-                      <p className="text-[11px] text-muted">
-                        {peer.os} · {peer.arch} · {formatMb(peer.ramMb)} RAM
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => void migrateTo(selectedWorkload, peer.id, peer.name)}
-                      className="tp-btn-primary"
-                    >
-                      Evaluate & Migrate
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
+                    <span className="block text-sm text-ink">{peer.name}</span>
+                    <span className="text-faint">
+                      {peer.os} · {peer.arch} · {formatMb(peer.ramMb)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-            <div className="mt-6 flex justify-end">
+            {targetId && (
+              <div className="mt-4">
+                <CompatibilityCard
+                  manifest={selectedWorkload.manifest}
+                  source={state.devices[state.thisDeviceId]}
+                  sourceStats={state.stats[state.thisDeviceId]}
+                  target={state.devices[targetId]}
+                  targetStats={state.stats[targetId]}
+                  link={state.link}
+                  feasibility={feasibility}
+                  loading={checking}
+                />
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setIsTargetPickerOpen(false)} className="tp-btn">
+                Cancel
+              </button>
               <button
-                onClick={() => setIsTargetPickerOpen(false)}
-                className="tp-btn"
+                type="button"
+                data-testid="confirm-migrate"
+                disabled={!targetId || checking}
+                onClick={() =>
+                  targetId && void migrateTo(selectedWorkload, targetId, state.devices[targetId]?.name ?? targetId)
+                }
+                className="tp-btn-primary"
               >
-                Close
+                {feasibility?.decision === 'REMOTE_ACCESS' ? 'Continue with remote access' : 'Migrate now'}
+                <Icon name="arrow" className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>

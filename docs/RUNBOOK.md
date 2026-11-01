@@ -33,12 +33,14 @@ cable adapters an address, or let them self-assign `169.254.x.x` (wait about 30 
 2. **Pair (on A):** click **Pair Device**. Laptop B appears under **Nearby devices** after a
    couple of seconds. Click **Select**, type the **PIN shown on B's screen**, click
    **Pair & Connect**. Both dashboards now show both laptops and their live stats.
-3. **Open the project (on A):** **Workloads** page > **VS Code project**. Paste the folder of the
-   project (in Explorer: right-click the folder > *Copy as path*), then click **Open in VS Code**.
+3. **Open the project (on A):** **Workloads** page > **VS Code project** > **Browse**, pick the
+   project folder in the Windows dialog, then click **Open in VS Code**.
    VS Code opens with the project. Work in it: open a few files, move the cursor, type something
    and **do not save**.
-4. **Migrate (on A):** on the project's card click **Migrate**, then pick Laptop B under
-   **Evaluate & Migrate**. The **Migration** tab opens and shows the steps live:
+4. **Migrate (on A):** on the project's card click **Migrate** and pick Laptop B. A
+   **compatibility card** compares both laptops against what the project needs (system, runtime,
+   VS Code, CPU, memory, disk, power, link) with Teleport's decision. Click **Migrate now**. The
+   **Migration** tab opens and shows the steps live:
    evaluating, transferring, validating, fencing, starting target, completed. It also shows the
    authority moving to B (epoch 1) and the interruption time (about 0.2 s).
 5. **On B:** VS Code opens with the same project, the same tabs, the same cursor positions and the
@@ -46,6 +48,21 @@ cable adapters an address, or let them self-assign `169.254.x.x` (wait about 30 
    The status bar on B says "Teleport: editor restored".
 6. **Migrate back (on B):** B's **Workloads** page shows the project. Click **Migrate** and pick A.
    Only what changed travels back.
+
+## Server demo (Python or Node, with dependencies)
+
+1. **On A:** **Workloads** > **Server project** > **Browse**, pick the server's folder. Teleport
+   shows what it found: Node.js or Python, the dependencies, the start command and the port (all
+   editable). Click **Start server**. A installs the dependencies (`npm ci` / `npm install`, or pip
+   into a private virtual environment), starts the server and opens it in the browser on localhost.
+2. Use the server so it has data (for example add a few records).
+3. **Migrate** it to B, check the compatibility card, **Migrate now**.
+4. **On B:** the project files and data arrive (dependencies are never copied), B installs the
+   dependencies for itself, starts the server and opens **http://localhost:PORT** with the same data.
+   The card on B shows each step ("installing dependencies", "ready on ...").
+
+Each workload has its own authority lease, stamped with the migration that set it: several
+migrations can run at once without touching each other (Migration tab: one tab per migration).
 
 Other demos from the same pages:
 
@@ -70,7 +87,8 @@ Other demos from the same pages:
 | The decision is Remote access instead of migrate | The Migration tab lists why: for example "Target has 248 MB free RAM". Close some apps on B, or install VS Code there. |
 | VS Code does not open | Install VS Code, or point Teleport to it: set `TELEPORT_VSCODE` to the path of `Code.exe` (Windows) or the `Visual Studio Code.app/Contents/MacOS/Electron` binary (Mac). |
 | A migration waits in "Starting target" | The link dropped right at the switch-over. Teleport waits until it knows which laptop has the project (never two copies). Reconnect, or click Abort. |
-| Start over | Close both Teleport windows, delete the `.teleport` folder in your user folder, start again and pair again. |
+| Start over | **History** > **Forget all devices** on both laptops, then pair again. Forgotten laptops cannot reconnect until they pair with a PIN. |
+| A server does not start on B | Its card shows the last log line. Node must be installed on B for Node servers; pip/npm need internet to install dependencies. |
 
 ## How it works (for questions from the judges)
 
