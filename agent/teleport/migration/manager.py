@@ -140,12 +140,12 @@ class DigestSigner:
 @dataclass
 class Timeouts:
     ready: float = 10.0
-    ack: float = 5.0
+    ack: float = 20.0  # a chunk can queue behind a full window on slow wifi; resending early only adds load
     validate: float = 30.0
     checkpoint: float = 10.0
     start: float = 30.0
     retries: int = 3
-    window: int = 8
+    window: int = 4  # chunks in flight: ~2 MB on the wire, enough for wifi without flooding a hotspot
     chunk_delay: float = 0.0  # dev/demo slow motion, TELEPORT_DEV_SLOW_TRANSFER_MS
     catchup_rounds: int = 3  # live delta rounds before freezing, to keep the freeze window small
     catchup_bytes: int = 64 * 1024  # freeze once a round has less than this left to send
@@ -899,7 +899,7 @@ class MigrationManager:
                     log.warning("%s: target rejected %s[%d], resending", st.id, record.id, index)
                 raise MigrationError(
                     f"Checkpoint {record.id} could not be sent intact "
-                    f"(failed after {t.retries + 1} attempts)."
+                    f"(failed after {t.retries + 1} attempts): the link is too slow or keeps dropping."
                 )
 
         try:
