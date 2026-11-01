@@ -90,9 +90,9 @@ test.describe('Teleport Dashboard & Migration Scenarios', () => {
     await expect(phaseBadge).toContainText('ROLLED_BACK');
 
     // Verify failure reason is displayed prominently
-    await expect(
-      page.getByText(/Validation failed at Checkpoint 4/i)
-    ).toBeVisible();
+    await expect(page.getByTestId('migration-error')).toContainText(
+      /Validation failed at Checkpoint 4/i
+    );
 
     // Authority stayed safely on SOURCE
     const sourceBadge = page.getByTestId('authority-state-source');

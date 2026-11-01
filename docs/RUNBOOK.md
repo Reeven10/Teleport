@@ -53,8 +53,12 @@ Other demos from the same pages:
   continues from the same number on the other laptop.
 - **Automatic migration:** Settings > mode **auto**, then use the stats simulator to drop A's
   battery to 5 % (shown as SIMULATED). Teleport recommends and migrates by itself.
-- **Remote access:** if B cannot run a workload (for example no VS Code installed there),
-  Teleport chooses **Remote access** instead, with the reasons, and the workload stays on A.
+- **Remote access:** on B, **Remote** tab > pick Laptop A > **Request access**. A's dashboard asks
+  **Allow / Deny** (on any page). After Allow, B shows A's live screen; click it to control A with
+  B's mouse and keyboard, **Esc** to release, **Disconnect** to end. A shows a red "can see and
+  control this screen" bar with **Stop sharing**. If B cannot run a workload (for example no VS Code
+  there), a migration chooses **Remote access** instead, with the reasons: the workload stays on A
+  and B's Remote tab opens A's screen once A allows it.
 - **History:** every migration and decision with its reasons, also after restarting.
 
 ## If something does not work

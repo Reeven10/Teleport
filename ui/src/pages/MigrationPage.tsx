@@ -180,17 +180,7 @@ export function MigrationPage() {
             {mig.phase === 'FAILED' ? 'Not migrated' : 'Rolled back: the workload kept running on the source'}
           </p>
           <p className="mt-1">{mig.error}</p>
-          {mig.reasons.filter((r) => r.severity !== 'pass' && r.text !== mig.error).length > 0 && (
-            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs">
-              {mig.reasons
-                .filter((r) => r.severity !== 'pass' && !r.text.includes(mig.error ?? ' '))
-                .map((r) => (
-                  <li key={r.code + r.text}>
-                    <span className="font-mono">{r.code}</span>: {r.text}
-                  </li>
-                ))}
-            </ul>
-          )}
+          <p className="mt-1 text-xs opacity-80">Details are in the reasons below.</p>
         </div>
       )}
 
