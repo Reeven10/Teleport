@@ -11,7 +11,7 @@ Tests and mocks: `tests/migration/` (`mocks.py` has an in-memory PeerLink pair w
 | EVALUATING | `feasibility.evaluate(...)`; the decision is logged with `history.log_decision` |
 | REMOTE_ACCESS | `remote.start_session(workload, viewer=target)`, then end |
 | FAILED | STAY (`error` lists the block reasons), or a failure before anything was offered |
-| TRANSFERRING | live checkpoint (A keeps running), `mig.prepare` (signed), then every unit in 256 KB `mig.chunk`s (window of 8, resent on a nack or timeout, up to 3 retries) |
+| TRANSFERRING | live checkpoint (A keeps running), `mig.prepare` (signed), then every unit in 256 KB `mig.chunk`s (window of 4, resent on a nack or after 20 s without an ack, up to 3 retries) |
 | VALIDATING | wait for `mig.validated ok` (target checked every chunk and unit hash) |
 | FENCING | final checkpoint, pause, `authority.fence` (epoch + 1), `mig.fence`, then `mig.fenced {changed}` and the changed units at the new epoch, then `mig.validated` again |
 | STARTING_TARGET | `mig.start {epoch}`, wait for `mig.started` |
@@ -112,7 +112,7 @@ pack the journal path), delta about 52 ms (four small units, sent concurrently),
 
 ## Tuning
 
-Defaults: `chunkSizeKb` 256, window 8 chunks in flight, gzip level 6 (`compressLevel`).
+Defaults: `chunkSizeKb` 256, window 4 chunks in flight (ack timeout 20 s, tuned for wifi), gzip level 6 (`compressLevel`).
 
 | chunk KB | window 4 | window 8 | window 16 |
 | --- | --- | --- | --- |

@@ -179,7 +179,12 @@ async function activate(context) {
   const periodic = setInterval(() => write(false), 1500);
   context.subscriptions.push({ dispose: () => clearInterval(periodic) });
   watchFlushRequests(context);
-  vscode.window.setStatusBarMessage('$(cloud-upload) Teleport: this editor can migrate', 6000);
+  // A permanent status bar item, so it is always visible that Teleport is tracking this editor.
+  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1000);
+  item.text = '$(cloud-upload) Teleport';
+  item.tooltip = 'Teleport is saving this editor (tabs, cursors, unsaved edits) so it can migrate.';
+  item.show();
+  context.subscriptions.push(item);
 }
 
 function deactivate() {

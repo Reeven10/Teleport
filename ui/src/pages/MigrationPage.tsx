@@ -170,6 +170,30 @@ export function MigrationPage() {
         </div>
       )}
 
+      {/* Why the last migration failed or rolled back: the agent's own short message plus details */}
+      {mig && mig.error && ['ROLLED_BACK', 'FAILED', 'ROLLING_BACK'].includes(mig.phase) && (
+        <div
+          data-testid="migration-error"
+          className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200"
+        >
+          <p className="font-bold">
+            {mig.phase === 'FAILED' ? 'Not migrated' : 'Rolled back: the workload kept running on the source'}
+          </p>
+          <p className="mt-1">{mig.error}</p>
+          {mig.reasons.filter((r) => r.severity !== 'pass' && r.text !== mig.error).length > 0 && (
+            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs">
+              {mig.reasons
+                .filter((r) => r.severity !== 'pass' && !r.text.includes(mig.error ?? ' '))
+                .map((r) => (
+                  <li key={r.code + r.text}>
+                    <span className="font-mono">{r.code}</span>: {r.text}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Scenario Simulation Switcher */}
       {state.mockFeederActive && (
         <div
