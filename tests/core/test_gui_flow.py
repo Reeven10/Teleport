@@ -81,3 +81,10 @@ def test_apps_gallery_and_stop_from_the_dashboard(tmp_path: Path) -> None:
         )
         assert client.get("/api/discovery").json() == []  # loopback agent: discovery off
         assert client.post("/api/workloads/nope/stop").status_code == 404
+
+
+def test_remote_view_relay_routes(tmp_path: Path) -> None:
+    with TestClient(create_app(Settings(home=tmp_path / "home", uiDist=tmp_path / "x"))) as client:
+        assert client.get("/api/remote-view/hosts").json() == []  # nothing paired yet
+        res = client.post("/api/remote-view/request", json={"hostId": "dev-nope", "workloadId": "desktop"})
+        assert res.status_code == 404 and "not a paired device" in res.json()["detail"]

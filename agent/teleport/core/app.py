@@ -21,6 +21,7 @@ from ..migration import MigrationError
 from .api import build_router
 from .context import Context
 from .manifest import ManifestError
+from .remote_view import build_remote_view_router, relay_viewer
 from .sdk_api import build_sdk_router
 from .settings import Prefs, Settings, load_device_id, load_sim_profile
 from .workloads import WorkloadError
@@ -179,6 +180,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.websocket("/ws/remote/{session_id}")
     async def ws_remote(ws: WebSocket, session_id: str) -> None:
         await ctx.remote.handle_viewer(ws, session_id)
+
+    app.include_router(build_remote_view_router(ctx))
+
+    @app.websocket("/ws/remote-view/{host_id}/{session_id}")
+    async def ws_remote_view(ws: WebSocket, host_id: str, session_id: str) -> None:
+        """This dashboard viewing a peer's screen: relayed from the peer's /ws/remote."""
+        await relay_viewer(ctx, ws, host_id, session_id)
 
     # Module-specific extra routes: a service may expose a `router: APIRouter` attribute.
     for _name, service in ctx.services():

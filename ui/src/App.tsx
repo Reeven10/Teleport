@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar.tsx';
 import { TopBar } from './components/layout/TopBar.tsx';
+import { RemoteConsentPrompt } from './components/remote/RemoteConsentPrompt.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { HistoryPage } from './pages/HistoryPage.tsx';
 import { MigrationPage } from './pages/MigrationPage.tsx';
@@ -15,6 +16,7 @@ export default function App() {
       <TeleportProvider>
         <div className="flex min-h-screen flex-col bg-slate-100 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
           <TopBar />
+          <RemoteConsentPrompt />
           <div className="flex flex-1">
             <Sidebar />
             <main className="flex-1 overflow-y-auto p-6 md:p-8">

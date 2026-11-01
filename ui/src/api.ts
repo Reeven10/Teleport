@@ -338,3 +338,30 @@ export async function apiOpenVSCodeProject(projectPath: string): Promise<{ ok: b
 export async function apiStopWorkload(workloadId: string): Promise<WorkloadRun> {
   return postJson<WorkloadRun>(`/api/workloads/${encodeURIComponent(workloadId)}/stop`, {});
 }
+
+// Viewing another device's screen: this agent relays to the paired host (agent/teleport/core/remote_view.py).
+export interface RemoteHost {
+  id: string;
+  name: string;
+  reachable: boolean;
+  error?: string;
+  workloads?: { id: string; name: string; running: boolean }[];
+  sessions?: RemoteSession[];
+}
+
+export async function apiFetchRemoteHosts(): Promise<RemoteHost[]> {
+  return getJson<RemoteHost[]>('/api/remote-view/hosts');
+}
+
+export async function apiRequestRemoteView(hostId: string, workloadId: string): Promise<RemoteSession> {
+  return postJson<RemoteSession>('/api/remote-view/request', { hostId, workloadId });
+}
+
+export async function apiStopRemoteView(hostId: string, sessionId: string): Promise<{ ok: boolean }> {
+  return postJson<{ ok: boolean }>('/api/remote-view/stop', { hostId, sessionId });
+}
+
+export function remoteViewUrl(hostId: string, sessionId: string): string {
+  const base = agentBase || window.location.origin;
+  return `${base.replace(/^http/, 'ws')}/ws/remote-view/${encodeURIComponent(hostId)}/${encodeURIComponent(sessionId)}`;
+}
