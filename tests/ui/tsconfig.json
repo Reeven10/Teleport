@@ -1,0 +1,16 @@
+{
+  "extends": "../../ui/tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../../ui",
+    "paths": {
+      "@contract": ["../contract/contract.ts"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "./**/*",
+    "../../contract/contract.ts",
+    "../../ui/src/**/*"
+  ]
+}
+

@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { expect, test, vi, beforeEach, afterEach } from 'vitest';
 import App from '@/App.tsx';
 
